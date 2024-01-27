@@ -1,22 +1,16 @@
 extern crate cocoa;
 use crate::common::{Clipboard, Result, RustImage, RustImageData};
-use std::error::Error;
 use std::ffi::{c_void, CStr};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{slice, thread};
 
 use cocoa::appkit::{
-    NSApp, NSApplication, NSApplicationActivateIgnoringOtherApps,
-    NSApplicationActivationPolicyRegular, NSBackingStoreBuffered, NSMenu, NSMenuItem, NSPasteboard,
-    NSPasteboardTypeHTML, NSPasteboardTypePNG, NSPasteboardTypeRTF, NSPasteboardTypeString,
-    NSRunningApplication, NSWindow, NSWindowStyleMask,
+    NSPasteboard, NSPasteboardTypeHTML, NSPasteboardTypePNG, NSPasteboardTypeRTF,
+    NSPasteboardTypeString,
 };
-use cocoa::base::{id, nil, selector, NO};
-use cocoa::foundation::{
-    NSArray, NSAutoreleasePool, NSData, NSFastEnumeration, NSPoint, NSProcessInfo, NSRect, NSSize,
-    NSString,
-};
+use cocoa::base::{id, nil};
+use cocoa::foundation::{NSAutoreleasePool, NSData, NSFastEnumeration, NSString};
 
 // required for Send trait because *mut runtime::Object; cannot be sent between threads safely
 pub struct SafeId(id);

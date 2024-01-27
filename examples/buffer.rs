@@ -1,4 +1,4 @@
-use clipboard_rs::{common::RustImage, Clipboard, ClipboardContext};
+use clipboard_rs::{Clipboard, ClipboardContext};
 
 fn main() {
     let mut ctx = ClipboardContext::new().unwrap();

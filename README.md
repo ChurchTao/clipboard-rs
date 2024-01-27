@@ -1,3 +1,110 @@
 # clipboard-rs
 
-clipboard-rs rust-clipboard is a cross-platform library for getting and setting the contents of the OS-level clipboard.
+clipboard-rs 是一个用 Rust 语言编写的跨平台库，用于获取和设置操作系统级别的剪贴板内容。它支持 Linux、Windows 和 MacOS。
+
+目前，MacOS 的逻辑已经完成编写，我们正在继续开发 Linux 和 Windows 的逻辑。
+
+## 使用方法
+
+暂时还没用哦，还没发布，等发布第一个 release 版本后再来看看吧。
+在 `Cargo.toml` 中添加如下内容：
+
+```toml
+[dependencies]
+clipboard-rs = "0.0.1"
+```
+
+## 示例
+
+### 简单读写
+
+```rust
+use clipboard_rs::{Clipboard, ClipboardContext};
+
+fn main() {
+    let mut ctx = ClipboardContext::new().unwrap();
+    let types = ctx.available_formats().unwrap();
+    println!("{:?}", types);
+
+    let content = ctx.get_text().unwrap();
+
+    println!("{}", content);
+
+    let rtf = ctx.get_rich_text().unwrap();
+
+    println!("{}", rtf);
+
+    let html = ctx.get_html().unwrap();
+
+    println!("{}", html);
+}
+```
+
+### 读取图片
+
+```rust
+use clipboard_rs::{common::RustImage, Clipboard, ClipboardContext};
+
+fn main() {
+    let mut ctx = ClipboardContext::new().unwrap();
+    let types = ctx.available_formats().unwrap();
+    println!("{:?}", types);
+
+    let img = ctx.get_image().unwrap();
+
+    println!(
+        "size={:?},byte len={}",
+        img.get_size(),
+        img.get_bytes().len()
+    );
+
+    img.save_to_file("/tmp/test.png").unwrap();
+}
+```
+
+### 读取任意类型
+
+```rust
+use clipboard_rs::{Clipboard, ClipboardContext};
+
+fn main() {
+    let mut ctx = ClipboardContext::new().unwrap();
+    let types = ctx.available_formats().unwrap();
+    println!("{:?}", types);
+
+    let buffer = ctx.get_buffer("public.html").unwrap();
+
+    let string = String::from_utf8(buffer).unwrap();
+
+    println!("{}", string);
+}
+```
+
+### 监听剪贴板变化
+
+```rust
+use clipboard_rs::{Clipboard, ClipboardContext};
+
+fn main() {
+    let mut ctx = ClipboardContext::new().unwrap();
+
+    ctx.on_change(Box::new(|| {
+        println!("Clipboard changed!");
+    }))
+    .unwrap();
+
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+```
+
+## 开发计划
+
+- [x] MacOS 支持
+- [ ] Linux 支持
+- [ ] Windows 支持
+
+## 许可证
+
+本项目遵循 MIT 许可证。详情请参阅 [LICENSE](LICENSE) 文件。
