@@ -1,30 +1,30 @@
 # clipboard-rs
 
-clipboard-rs is a cross-platform library written in Rust for getting and setting the system-level clipboard content. It supports Linux, Windows, and MacOS.
+clipboard-rs 是一个用 Rust 语言编写的跨平台库，用于获取和设置操作系统级别的剪贴板内容。它支持 Linux、Windows 和 MacOS。
 
-Currently, the logic for MacOS has been completed, and we are continuing to develop the logic for Linux and Windows.
+目前，MacOS 的逻辑已经完成编写，我们正在继续开发 Linux 和 Windows 的逻辑。
 
 [简体中文](README_ZH.md)
 
-## Development Plan
+## 开发计划
 
-- [x] MacOS Support
-- [ ] Linux Support
-- [ ] Windows Support
+- [x] MacOS 支持
+- [ ] Linux 支持
+- [ ] Windows 支持
 
-## Usage
+## 使用方法
 
-It's not ready for use yet, as it hasn't been released. Please check back after the first release version is published.
-Add the following content to your `Cargo.toml`:
+暂时还没用哦，还没发布，等发布第一个 release 版本后再来看看吧。
+在 `Cargo.toml` 中添加如下内容：
 
 ```toml
 [dependencies]
 clipboard-rs = "0.0.1"
 ```
 
-## Examples
+## 示例
 
-### Simple Read and Write
+### 简单读写
 
 ```rust
 use clipboard_rs::{Clipboard, ClipboardContext};
@@ -48,7 +48,7 @@ fn main() {
 }
 ```
 
-### Reading Images
+### 读取图片
 
 ```rust
 use clipboard_rs::{common::RustImage, Clipboard, ClipboardContext};
@@ -70,7 +70,7 @@ fn main() {
 }
 ```
 
-### Reading Any Format
+### 读取任意类型
 
 ```rust
 use clipboard_rs::{Clipboard, ClipboardContext};
@@ -88,7 +88,7 @@ fn main() {
 }
 ```
 
-### Listening to Clipboard Changes
+### 监听剪贴板变化
 
 ```rust
 use clipboard_rs::{Clipboard, ClipboardContext};
@@ -107,6 +107,6 @@ fn main() {
 }
 ```
 
-## License
+## 许可证
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+本项目遵循 MIT 许可证。详情请参阅 [LICENSE](LICENSE) 文件。
