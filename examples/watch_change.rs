@@ -3,12 +3,12 @@ use clipboard_rs::{Clipboard, ClipboardContext};
 fn main() {
     let mut ctx = ClipboardContext::new().unwrap();
 
-    ctx.on_change(Box::new(|| {
+    ctx.add_listener(Box::new(|_ctx| {
         println!("Clipboard changed!");
-    }))
-    .unwrap();
+        _ctx.available_formats().unwrap().iter().for_each(|f| {
+            println!("{}", f);
+        });
+    }));
 
-    loop {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
+    ctx.start_listen_change();
 }
