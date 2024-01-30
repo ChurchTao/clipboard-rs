@@ -16,6 +16,16 @@ pub struct ResizeOptions {
     pub quality: u8,
 }
 
+impl RustImageData {
+    pub fn empty() -> Self {
+        RustImageData {
+            width: 0,
+            height: 0,
+            data: Vec::new(),
+        }
+    }
+}
+
 pub trait RustImage: Sized {
     fn from_bytes(bytes: &[u8]) -> Result<Self>;
 

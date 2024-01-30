@@ -6,7 +6,7 @@ use cocoa::appkit::{
     NSPasteboardTypeString,
 };
 use cocoa::base::{id, nil};
-use cocoa::foundation::{NSAutoreleasePool, NSData, NSFastEnumeration, NSString};
+use cocoa::foundation::{NSArray, NSAutoreleasePool, NSData, NSFastEnumeration, NSString};
 use std::ffi::{c_void, CStr};
 use std::slice;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -76,6 +76,7 @@ impl ClipboardWatcher for ClipboardWatcherContext {
                 last_change_count = change_count;
             }
         }
+        self.running = false;
     }
 
     fn get_shutdown_channel(&mut self) -> WatcherShutdown {
@@ -103,6 +104,9 @@ impl Clipboard for ClipboardContext {
         let res = unsafe {
             let _pool = NSAutoreleasePool::new(nil);
             let types = self.clipboard.types().autorelease();
+            if types.count() == 0 {
+                return Ok(Vec::new());
+            }
             types
                 .iter()
                 .map(|t| {
@@ -123,7 +127,9 @@ impl Clipboard for ClipboardContext {
                 .clipboard
                 .stringForType(NSPasteboardTypeString)
                 .autorelease();
-
+            if ns_string.len() == 0 {
+                return Ok("".to_owned());
+            }
             let bytes = ns_string.UTF8String();
             let c_str = CStr::from_ptr(bytes);
             let str_slice = c_str.to_str()?;
@@ -139,7 +145,9 @@ impl Clipboard for ClipboardContext {
                 .clipboard
                 .stringForType(NSPasteboardTypeRTF)
                 .autorelease();
-
+            if ns_string.len() == 0 {
+                return Ok("".to_owned());
+            }
             let bytes = ns_string.UTF8String();
             let c_str = CStr::from_ptr(bytes);
             let str_slice = c_str.to_str()?;
@@ -155,7 +163,9 @@ impl Clipboard for ClipboardContext {
                 .clipboard
                 .stringForType(NSPasteboardTypeHTML)
                 .autorelease();
-
+            if ns_string.len() == 0 {
+                return Ok("".to_owned());
+            }
             let bytes = ns_string.UTF8String();
             let c_str = CStr::from_ptr(bytes);
             let str_slice = c_str.to_str()?;
@@ -171,9 +181,11 @@ impl Clipboard for ClipboardContext {
                 .clipboard
                 .dataForType(NSPasteboardTypePNG)
                 .autorelease();
+            if ns_data.length() == 0 {
+                return Ok(RustImageData::empty());
+            }
             let length: usize = ns_data.length() as usize;
             let bytes = slice::from_raw_parts(ns_data.bytes() as *const u8, length).to_vec();
-
             RustImageData::from_bytes(&bytes)?
         };
         Ok(res)
@@ -186,6 +198,9 @@ impl Clipboard for ClipboardContext {
                 .clipboard
                 .dataForType(NSString::alloc(nil).init_str(format))
                 .autorelease();
+            if ns_data.length() == 0 {
+                return Ok(Vec::new());
+            }
             let length: usize = ns_data.length() as usize;
             let bytes = slice::from_raw_parts(ns_data.bytes() as *const u8, length).to_vec();
             bytes

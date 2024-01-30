@@ -5,15 +5,15 @@ fn main() {
     let types = ctx.available_formats().unwrap();
     println!("{:?}", types);
 
-    let content = ctx.get_text().unwrap();
-
-    println!("{}", content);
-
     let rtf = ctx.get_rich_text().unwrap();
 
-    println!("{}", rtf);
+    println!("rtf={}", rtf);
 
     let html = ctx.get_html().unwrap();
 
-    println!("{}", html);
+    println!("html={}", html);
+
+    let content = ctx.get_text().unwrap();
+
+    println!("txt={}", content);
 }

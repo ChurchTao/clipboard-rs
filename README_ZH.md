@@ -30,22 +30,23 @@ clipboard-rs = "0.0.1"
 use clipboard_rs::{Clipboard, ClipboardContext};
 
 fn main() {
-    let mut ctx = ClipboardContext::new().unwrap();
+    let ctx = ClipboardContext::new().unwrap();
     let types = ctx.available_formats().unwrap();
     println!("{:?}", types);
 
-    let content = ctx.get_text().unwrap();
-
-    println!("{}", content);
-
     let rtf = ctx.get_rich_text().unwrap();
 
-    println!("{}", rtf);
+    println!("rtf={}", rtf);
 
     let html = ctx.get_html().unwrap();
 
-    println!("{}", html);
+    println!("html={}", html);
+
+    let content = ctx.get_text().unwrap();
+
+    println!("txt={}", content);
 }
+
 ```
 
 ### 读取图片
@@ -54,7 +55,7 @@ fn main() {
 use clipboard_rs::{common::RustImage, Clipboard, ClipboardContext};
 
 fn main() {
-    let mut ctx = ClipboardContext::new().unwrap();
+    let ctx = ClipboardContext::new().unwrap();
     let types = ctx.available_formats().unwrap();
     println!("{:?}", types);
 
@@ -68,6 +69,7 @@ fn main() {
 
     img.save_to_file("/tmp/test.png").unwrap();
 }
+
 ```
 
 ### 读取任意类型
@@ -76,7 +78,7 @@ fn main() {
 use clipboard_rs::{Clipboard, ClipboardContext};
 
 fn main() {
-    let mut ctx = ClipboardContext::new().unwrap();
+    let ctx = ClipboardContext::new().unwrap();
     let types = ctx.available_formats().unwrap();
     println!("{:?}", types);
 
@@ -86,25 +88,36 @@ fn main() {
 
     println!("{}", string);
 }
+
 ```
 
 ### 监听剪贴板变化
 
 ```rust
-use clipboard_rs::{Clipboard, ClipboardContext};
+use clipboard_rs::{Clipboard, ClipboardContext, ClipboardWatcher, ClipboardWatcherContext};
+use std::{thread, time::Duration};
 
 fn main() {
-    let mut ctx = ClipboardContext::new().unwrap();
+    let ctx = ClipboardContext::new().unwrap();
+    let mut watcher = ClipboardWatcherContext::new().unwrap();
 
-    ctx.on_change(Box::new(|| {
-        println!("Clipboard changed!");
-    }))
-    .unwrap();
+    watcher.add_handler(Box::new(move || {
+        let content = ctx.get_text().unwrap();
+        println!("read:{}", content);
+    }));
 
-    loop {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
+    let watcher_shutdown = watcher.get_shutdown_channel();
+
+    thread::spawn(move || {
+        thread::sleep(Duration::from_secs(5));
+        println!("stop watch!");
+        watcher_shutdown.stop();
+    });
+
+    println!("start watch!");
+    watcher.start_watch();
 }
+
 ```
 
 ## 许可证
