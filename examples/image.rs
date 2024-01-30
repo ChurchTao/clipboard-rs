@@ -1,7 +1,7 @@
 use clipboard_rs::{common::RustImage, Clipboard, ClipboardContext};
 
 fn main() {
-    let mut ctx = ClipboardContext::new().unwrap();
+    let ctx = ClipboardContext::new().unwrap();
     let types = ctx.available_formats().unwrap();
     println!("{:?}", types);
 

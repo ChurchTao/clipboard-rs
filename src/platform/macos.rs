@@ -1,72 +1,108 @@
 extern crate cocoa;
-use crate::common::{Clipboard, Result, RustImage, RustImageData};
-use std::ffi::{c_void, CStr};
-use std::sync::mpsc::{self, Receiver};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use std::{slice, thread};
-
+use crate::common::{CallBack, Result, RustImage, RustImageData};
+use crate::{Clipboard, ClipboardWatcher};
 use cocoa::appkit::{
     NSPasteboard, NSPasteboardTypeHTML, NSPasteboardTypePNG, NSPasteboardTypeRTF,
     NSPasteboardTypeString,
 };
 use cocoa::base::{id, nil};
 use cocoa::foundation::{NSAutoreleasePool, NSData, NSFastEnumeration, NSString};
+use std::ffi::{c_void, CStr};
+use std::slice;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::time::Duration;
 
 // required for Send trait because *mut runtime::Object; cannot be sent between threads safely
 pub struct SafeId(id);
 unsafe impl Send for SafeId {}
+unsafe impl Sync for SafeId {}
 
-pub struct MacOSClipboardContext {
-    clipboard: Arc<Mutex<SafeId>>,
-    listeners: Vec<Box<dyn Fn(&Self) + Send + Sync>>,
-    consumer: Option<Receiver<()>>,
-    listen_thread: Option<thread::JoinHandle<()>>,
+pub struct ClipboardContext {
+    clipboard: id,
 }
 
-impl MacOSClipboardContext {
-    pub fn new() -> Result<MacOSClipboardContext> {
+pub struct ClipboardWatcherContext {
+    clipboard: id,
+    handlers: Vec<CallBack>,
+    stop_signal: Sender<()>,
+    stop_receiver: Receiver<()>,
+    running: bool,
+}
+
+unsafe impl Send for ClipboardWatcherContext {}
+impl ClipboardWatcherContext {
+    pub fn new() -> Result<ClipboardWatcherContext> {
         let ns_pastboard = unsafe { NSPasteboard::generalPasteboard(nil) };
-        let mut clipboard_ctx = MacOSClipboardContext {
-            clipboard: Arc::new(Mutex::new(SafeId(ns_pastboard))),
-            listeners: Vec::new(),
-            consumer: None,
-            listen_thread: None,
+        let (tx, rx) = mpsc::channel();
+        Ok(ClipboardWatcherContext {
+            clipboard: ns_pastboard,
+            handlers: Vec::new(),
+            stop_signal: tx,
+            stop_receiver: rx,
+            running: false,
+        })
+    }
+}
+
+impl ClipboardWatcher for ClipboardWatcherContext {
+    fn add_handler(&mut self, f: CallBack) -> &mut Self {
+        self.handlers.push(f);
+        self
+    }
+
+    fn start_watch(&mut self) {
+        if self.running {
+            println!("already start watch!");
+            return;
+        }
+        self.running = true;
+        let mut last_change_count: i64 = unsafe { self.clipboard.changeCount() };
+        loop {
+            // if receive stop signal, break loop
+            if self
+                .stop_receiver
+                .recv_timeout(Duration::from_millis(500))
+                .is_ok()
+            {
+                break;
+            }
+            let change_count = unsafe { self.clipboard.changeCount() };
+            if last_change_count == 0 {
+                last_change_count = change_count;
+            } else if change_count != last_change_count {
+                self.handlers.iter().for_each(|handler| {
+                    handler();
+                });
+                last_change_count = change_count;
+            }
+        }
+    }
+
+    fn get_shutdown_channel(&mut self) -> WatcherShutdown {
+        WatcherShutdown {
+            stop_signal: self.stop_signal.clone(),
+        }
+    }
+}
+
+impl ClipboardContext {
+    pub fn new() -> Result<ClipboardContext> {
+        let ns_pastboard = unsafe { NSPasteboard::generalPasteboard(nil) };
+        let clipboard_ctx = ClipboardContext {
+            clipboard: ns_pastboard,
         };
-        clipboard_ctx.start_listen();
         Ok(clipboard_ctx)
     }
-
-    fn start_listen(&mut self) {
-        let shared_clipboard = self.clipboard.clone();
-        let (sender, receiver) = mpsc::channel();
-        self.consumer = Some(receiver);
-        let thread = thread::spawn(move || {
-            let clipboard = shared_clipboard.lock().unwrap().0;
-            let mut last_change_count: i64 = unsafe { clipboard.changeCount() };
-            loop {
-                let change_count = unsafe { clipboard.changeCount() };
-                if last_change_count == 0 {
-                    last_change_count = change_count;
-                } else if change_count != last_change_count {
-                    sender.send(()).unwrap();
-                    last_change_count = change_count;
-                }
-                thread::sleep(Duration::from_millis(500));
-            }
-        });
-        self.listen_thread = Some(thread);
-    }
 }
 
-unsafe impl Send for MacOSClipboardContext {}
-unsafe impl Sync for MacOSClipboardContext {}
+unsafe impl Send for ClipboardContext {}
+unsafe impl Sync for ClipboardContext {}
 
-impl Clipboard for MacOSClipboardContext {
+impl Clipboard for ClipboardContext {
     fn available_formats(&self) -> Result<Vec<String>> {
         let res = unsafe {
             let _pool = NSAutoreleasePool::new(nil);
-            let types = self.clipboard.lock().unwrap().0.types().autorelease();
+            let types = self.clipboard.types().autorelease();
             types
                 .iter()
                 .map(|t| {
@@ -85,9 +121,6 @@ impl Clipboard for MacOSClipboardContext {
             let _pool = NSAutoreleasePool::new(nil);
             let ns_string: id = self
                 .clipboard
-                .lock()
-                .unwrap()
-                .0
                 .stringForType(NSPasteboardTypeString)
                 .autorelease();
 
@@ -104,9 +137,6 @@ impl Clipboard for MacOSClipboardContext {
             let _pool = NSAutoreleasePool::new(nil);
             let ns_string: id = self
                 .clipboard
-                .lock()
-                .unwrap()
-                .0
                 .stringForType(NSPasteboardTypeRTF)
                 .autorelease();
 
@@ -123,9 +153,6 @@ impl Clipboard for MacOSClipboardContext {
             let _pool = NSAutoreleasePool::new(nil);
             let ns_string: id = self
                 .clipboard
-                .lock()
-                .unwrap()
-                .0
                 .stringForType(NSPasteboardTypeHTML)
                 .autorelease();
 
@@ -142,9 +169,6 @@ impl Clipboard for MacOSClipboardContext {
             let _pool = NSAutoreleasePool::new(nil);
             let ns_data = self
                 .clipboard
-                .lock()
-                .unwrap()
-                .0
                 .dataForType(NSPasteboardTypePNG)
                 .autorelease();
             let length: usize = ns_data.length() as usize;
@@ -160,9 +184,6 @@ impl Clipboard for MacOSClipboardContext {
             let _pool = NSAutoreleasePool::new(nil);
             let ns_data = self
                 .clipboard
-                .lock()
-                .unwrap()
-                .0
                 .dataForType(NSString::alloc(nil).init_str(format))
                 .autorelease();
             let length: usize = ns_data.length() as usize;
@@ -176,9 +197,6 @@ impl Clipboard for MacOSClipboardContext {
         let res = unsafe {
             let ns_string = NSString::alloc(nil).init_str(text.as_str());
             self.clipboard
-                .lock()
-                .unwrap()
-                .0
                 .setString_forType(ns_string, NSPasteboardTypeString)
         };
         if !res {
@@ -191,9 +209,6 @@ impl Clipboard for MacOSClipboardContext {
         let res = unsafe {
             let ns_string = NSString::alloc(nil).init_str(text.as_str());
             self.clipboard
-                .lock()
-                .unwrap()
-                .0
                 .setString_forType(ns_string, NSPasteboardTypeRTF)
         };
         if !res {
@@ -206,9 +221,6 @@ impl Clipboard for MacOSClipboardContext {
         let res = unsafe {
             let ns_string = NSString::alloc(nil).init_str(html.as_str());
             self.clipboard
-                .lock()
-                .unwrap()
-                .0
                 .setString_forType(ns_string, NSPasteboardTypeHTML)
         };
         if !res {
@@ -224,11 +236,7 @@ impl Clipboard for MacOSClipboardContext {
                 image.as_ptr() as *const c_void,
                 image.len() as u64,
             );
-            self.clipboard
-                .lock()
-                .unwrap()
-                .0
-                .setData_forType(ns_data, NSPasteboardTypePNG)
+            self.clipboard.setData_forType(ns_data, NSPasteboardTypePNG)
         };
         if !res {
             return Err("set image failed".into());
@@ -244,9 +252,6 @@ impl Clipboard for MacOSClipboardContext {
                 buffer.len() as u64,
             );
             self.clipboard
-                .lock()
-                .unwrap()
-                .0
                 .setData_forType(ns_data, NSString::alloc(nil).init_str(format))
         };
         if !res {
@@ -256,27 +261,17 @@ impl Clipboard for MacOSClipboardContext {
     }
 
     fn clear(&self) -> Result<()> {
-        unsafe { self.clipboard.lock().unwrap().0.clearContents() };
+        unsafe { self.clipboard.clearContents() };
         Ok(())
     }
+}
 
-    fn start_listen_change(&mut self) {
-        match self.listen_thread {
-            Some(_) => {}
-            None => {
-                self.start_listen();
-            }
-        }
-        match self.consumer.take() {
-            Some(receiver) => loop {
-                let _ = receiver.recv();
-                self.listeners.iter().for_each(|f| f(&self));
-            },
-            _ => {}
-        }
-    }
+pub struct WatcherShutdown {
+    stop_signal: Sender<()>,
+}
 
-    fn add_listener(&mut self, f: Box<dyn Fn(&Self) + Send + Sync>) {
-        self.listeners.push(f);
+impl Drop for WatcherShutdown {
+    fn drop(&mut self) {
+        let _ = self.stop_signal.send(());
     }
 }
