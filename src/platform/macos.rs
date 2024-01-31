@@ -1,4 +1,3 @@
-extern crate cocoa;
 use crate::common::{CallBack, Result, RustImage, RustImageData};
 use crate::{Clipboard, ClipboardWatcher};
 use cocoa::appkit::{
