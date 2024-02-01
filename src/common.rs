@@ -1,5 +1,5 @@
 use image::imageops::FilterType;
-use image::{self, GenericImageView, ImageFormat};
+use image::{self, DynamicImage, GenericImageView, ImageFormat};
 use std::error::Error;
 use std::io::Cursor;
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
@@ -8,22 +8,13 @@ pub type CallBack = Box<dyn Fn() + Send + Sync>;
 pub struct RustImageData {
     width: u32,
     height: u32,
-    data: Vec<u8>,
     format: Option<ImageFormat>,
-}
-
-impl RustImageData {
-    pub fn empty() -> Self {
-        RustImageData {
-            width: 0,
-            height: 0,
-            data: Vec::new(),
-            format: None,
-        }
-    }
+    data: Option<DynamicImage>,
 }
 
 pub trait RustImage: Sized {
+    fn empty() -> Self;
+    fn is_empty(&self) -> bool;
     /// en: Read image from file path
     /// zh: 从文件路径读取图片
     fn from_file_path(path: &str) -> Result<Self>;
@@ -38,9 +29,20 @@ pub trait RustImage: Sized {
 
     fn get_bytes(&self) -> &[u8];
 
-    /// en: Resize image, return new image, will not modify the original image, default return Png
-    /// zh: 调整图片大小，返回新的图片，不会修改原图片，默认返回Png
-    fn resize(&mut self, width: u32, height: u32, filter: FilterType) -> Result<Self>;
+    /// /// Scale this image down to fit within a specific size.
+    /// Returns a new image. The image's aspect ratio is preserved.
+    /// The image is scaled to the maximum possible size that fits
+    /// within the bounds specified by `nwidth` and `nheight`.
+    ///
+    /// This method uses a fast integer algorithm where each source
+    /// pixel contributes to exactly one target pixel.
+    /// May give aliasing artifacts if new size is close to old size.
+    fn thumbnail(&self, width: u32, height: u32) -> Result<Self>;
+
+    /// en: Adjust the size of the image, do not retain the aspect ratio, return a new image,
+    /// will not modify the original image, the default return Png
+    /// zh: 调整图片大小，不保留长宽比，返回新的图片，不会修改原图片，默认返回Png
+    fn resize(&self, width: u32, height: u32, filter: FilterType) -> Result<Self>;
 
     fn get_format(&self) -> Option<ImageFormat>;
 
@@ -57,11 +59,23 @@ pub trait RustImage: Sized {
 }
 
 impl RustImage for RustImageData {
+    fn empty() -> Self {
+        RustImageData {
+            width: 0,
+            height: 0,
+            format: None,
+            data: None,
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.data.is_none()
+    }
+
     fn from_bytes(bytes: &[u8]) -> Result<Self> {
         let image = image::load_from_memory(bytes)?;
         let (width, height) = image.dimensions();
-        let data = bytes.as_ref().to_vec();
-        let format = image::guess_format(&data);
+        let format = image::guess_format(image.as_bytes());
         let format = match format {
             Ok(f) => Some(f),
             Err(_) => None,
@@ -69,8 +83,8 @@ impl RustImage for RustImageData {
         Ok(RustImageData {
             width,
             height,
-            data,
             format,
+            data: Some(image),
         })
     }
 
@@ -85,8 +99,8 @@ impl RustImage for RustImageData {
         Ok(RustImageData {
             width,
             height,
-            data: image.into_bytes(),
             format,
+            data: Some(image),
         })
     }
 
@@ -94,48 +108,57 @@ impl RustImage for RustImageData {
         (self.width, self.height)
     }
 
-    fn resize(&mut self, width: u32, height: u32, filter: FilterType) -> Result<Self> {
-        let image = image::load_from_memory(&self.data)?;
-        let resized = image.resize_exact(width, height, filter);
-
-        let mut buf = Cursor::new(Vec::new());
-        resized.write_to(&mut buf, image::ImageOutputFormat::Png)?;
-        let data: Vec<u8> = buf.into_inner();
-        let (width, height) = resized.dimensions();
-        Ok(RustImageData {
-            width,
-            height,
-            data,
-            format: Some(ImageFormat::Png),
-        })
+    fn get_bytes(&self) -> &[u8] {
+        match &self.data {
+            Some(image) => image.as_bytes(),
+            None => &[],
+        }
     }
 
-    fn get_bytes(&self) -> &[u8] {
-        &self.data
+    fn resize(&self, width: u32, height: u32, filter: FilterType) -> Result<Self> {
+        match &self.data {
+            Some(image) => {
+                let resized = image.resize_exact(width, height, filter);
+                let mut buf = Cursor::new(Vec::new());
+                resized.write_to(&mut buf, image::ImageOutputFormat::Png)?;
+                let (width, height) = resized.dimensions();
+                Ok(RustImageData {
+                    width,
+                    height,
+                    format: Some(ImageFormat::Png),
+                    data: Some(resized),
+                })
+            }
+            None => Err("image is empty".into()),
+        }
     }
 
     /// An Image in JPEG Format with specified quality, up to 100
     fn to_jpeg(&self, quality: u8) -> Result<Self> {
-        let image = image::load_from_memory(&self.data)?;
-        let mut buf = Cursor::new(Vec::new());
-        image.write_to(&mut buf, image::ImageOutputFormat::Jpeg(quality))?;
-        let data: Vec<u8> = buf.into_inner();
-        let (width, height) = image.dimensions();
-        Ok(RustImageData {
-            width,
-            height,
-            data,
-            format: Some(ImageFormat::Jpeg),
-        })
+        match &self.data {
+            Some(image) => {
+                let mut buf = Cursor::new(Vec::new());
+                image.write_to(&mut buf, image::ImageOutputFormat::Jpeg(quality))?;
+                let data = image::load_from_memory(&buf.into_inner())?;
+                let (width, height) = data.dimensions();
+                Ok(RustImageData {
+                    width,
+                    height,
+                    data: Some(data),
+                    format: Some(ImageFormat::Jpeg),
+                })
+            }
+            None => Err("image is empty".into()),
+        }
     }
 
     fn save_to_file(&self, path: &str) -> Result<()> {
-        if let Some(format) = self.format {
-            let image = image::load_from_memory(&self.data)?;
-            image.save_with_format(path, format)?;
-            return Ok(());
-        } else {
-            Err("image format unknow".into())
+        match &self.data {
+            Some(image) => {
+                image.save(path)?;
+                Ok(())
+            }
+            None => Err("image is empty".into()),
         }
     }
 
@@ -144,16 +167,38 @@ impl RustImage for RustImageData {
     }
 
     fn to_png(&self) -> Result<Self> {
-        let image = image::load_from_memory(&self.data)?;
-        let mut buf = Cursor::new(Vec::new());
-        image.write_to(&mut buf, image::ImageOutputFormat::Png)?;
-        let data: Vec<u8> = buf.into_inner();
-        let (width, height) = image.dimensions();
-        Ok(RustImageData {
-            width,
-            height,
-            data,
-            format: Some(ImageFormat::Png),
-        })
+        match &self.data {
+            Some(image) => {
+                let mut buf = Cursor::new(Vec::new());
+                image.write_to(&mut buf, image::ImageOutputFormat::Png)?;
+                let data = image::load_from_memory(&buf.into_inner())?;
+                let (width, height) = data.dimensions();
+                Ok(RustImageData {
+                    width,
+                    height,
+                    data: Some(data),
+                    format: Some(ImageFormat::Png),
+                })
+            }
+            None => Err("image is empty".into()),
+        }
+    }
+
+    fn thumbnail(&self, width: u32, height: u32) -> Result<Self> {
+        match &self.data {
+            Some(image) => {
+                let resized = image.thumbnail(width, height);
+                let mut buf = Cursor::new(Vec::new());
+                resized.write_to(&mut buf, image::ImageOutputFormat::Png)?;
+                let (width, height) = resized.dimensions();
+                Ok(RustImageData {
+                    width,
+                    height,
+                    format: Some(ImageFormat::Png),
+                    data: Some(resized),
+                })
+            }
+            None => Err("image is empty".into()),
+        }
     }
 }

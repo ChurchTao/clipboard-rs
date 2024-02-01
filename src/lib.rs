@@ -1,6 +1,7 @@
 pub mod common;
 mod platform;
 use common::{CallBack, Result, RustImageData};
+pub use image::imageops::FilterType;
 use platform::WatcherShutdown;
 pub use platform::{ClipboardContext, ClipboardWatcherContext};
 pub trait Clipboard: Send {
