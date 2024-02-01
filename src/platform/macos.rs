@@ -6,6 +6,7 @@ use cocoa::appkit::{
 };
 use cocoa::base::{id, nil};
 use cocoa::foundation::{NSArray, NSAutoreleasePool, NSData, NSFastEnumeration, NSString};
+use image::ImageFormat;
 use std::ffi::{c_void, CStr};
 use std::slice;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -243,12 +244,20 @@ impl Clipboard for ClipboardContext {
         Ok(())
     }
 
-    fn set_image(&self, image: Vec<u8>) -> Result<()> {
+    fn set_image(&self, image: RustImageData) -> Result<()> {
+        match image.get_format() {
+            Some(format) => {
+                if format != ImageFormat::Png {
+                    return Err("set image only support png format".into());
+                }
+            }
+            None => return Err("image format unknow".into()),
+        }
         let res = unsafe {
             let ns_data = NSData::dataWithBytes_length_(
                 nil,
-                image.as_ptr() as *const c_void,
-                image.len() as u64,
+                image.get_bytes().as_ptr() as *const c_void,
+                image.get_bytes().len() as u64,
             );
             self.clipboard.setData_forType(ns_data, NSPasteboardTypePNG)
         };

@@ -40,7 +40,7 @@ pub trait Clipboard: Send {
 
     fn set_html(&self, html: String) -> Result<()>;
 
-    fn set_image(&self, image: Vec<u8>) -> Result<()>;
+    fn set_image(&self, image: RustImageData) -> Result<()>;
 }
 
 pub trait ClipboardWatcher: Send {
