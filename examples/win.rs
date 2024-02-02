@@ -1,19 +1,29 @@
-use clipboard_rs::{Clipboard, ClipboardContext};
+use clipboard_rs::{common::RustImage, Clipboard, ClipboardContext};
 
 fn main() {
     let ctx = ClipboardContext::new().unwrap();
     let types = ctx.available_formats().unwrap();
     println!("{:?}", types);
 
-    // let rtf = ctx.get_rich_text().unwrap();
+    let img = ctx.get_image().unwrap();
 
-    // println!("rtf={}", rtf);
+    println!(
+        "size={:?},byte len={}",
+        img.get_size(),
+        img.get_bytes().len()
+    );
 
-    // let html = ctx.get_html().unwrap();
+    img.save_to_file("C:\\Users\\churcht\\test.png").unwrap();
 
-    // println!("html={}", html);
+    let resize_img = img.thumbnail(300, 300).unwrap();
 
-    // let content = ctx.get_text().unwrap();
+    println!(
+        "size={:?},byte len={}",
+        resize_img.get_size(),
+        resize_img.get_bytes().len()
+    );
 
-    // println!("txt={}", content);
+    resize_img
+        .save_to_file("C:\\Users\\churcht\\test_resize.png")
+        .unwrap();
 }
