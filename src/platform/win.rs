@@ -4,9 +4,14 @@ use crate::common::{CallBack, Result, RustImage, RustImageData};
 use crate::{Clipboard, ClipboardWatcher};
 use clipboard_win::types::c_uint;
 use clipboard_win::{
-    formats, get_clipboard, get_clipboard_string, raw, set_clipboard, Clipboard as ClipboardWin,
-    Getter, SysResult,
+    formats, get_clipboard, raw, set_clipboard, Clipboard as ClipboardWin, SysResult,
 };
+use image::ImageFormat;
+use windows_win::sys::{
+    AddClipboardFormatListener, PostMessageW, RemoveClipboardFormatListener, HWND,
+    WM_CLIPBOARDUPDATE,
+};
+use windows_win::{Messages, Window};
 
 static UNKNOW_FORMAT: &str = "unknow format";
 static CF_RTF: &str = "Rich Text Format";
@@ -14,17 +19,56 @@ static CF_HTML: &str = "HTML Format";
 static CF_PNG: &str = "PNG";
 
 pub struct ClipboardContext {
-    clipboard: ClipboardWin,
     format_map: HashMap<&'static str, c_uint>,
 }
 
-pub struct ClipboardWatcherContext {}
+pub struct ClipboardWatcherContext {
+    handlers: Vec<CallBack>,
+    window: Window,
+}
 
-pub struct WatcherShutdown {}
+unsafe impl Send for ClipboardContext {}
+unsafe impl Sync for ClipboardContext {}
+unsafe impl Send for ClipboardWatcherContext {}
+
+pub struct WatcherShutdown {
+    window: HWND,
+}
+
+impl Drop for WatcherShutdown {
+    fn drop(&mut self) {
+        unsafe { PostMessageW(self.window, WM_CLIPBOARDUPDATE, 0, -1) };
+    }
+}
+
+unsafe impl Send for WatcherShutdown {}
+
+pub struct ClipboardListener(HWND);
+
+impl ClipboardListener {
+    pub fn new(window: HWND) -> Result<Self> {
+        unsafe {
+            if AddClipboardFormatListener(window) != 1 {
+                Err("AddClipboardFormatListener failed".into())
+            } else {
+                Ok(ClipboardListener(window))
+            }
+        }
+    }
+}
+
+impl Drop for ClipboardListener {
+    fn drop(&mut self) {
+        unsafe {
+            RemoveClipboardFormatListener(self.0);
+        }
+    }
+}
 
 impl ClipboardContext {
     pub fn new() -> Result<ClipboardContext> {
-        let clipboard = ClipboardWin::new_attempts(10).expect("Open clipboard");
+        let window = core::ptr::null_mut();
+        let _ = ClipboardWin::new_attempts_for(window, 10).expect("Open clipboard");
         let format_map = {
             let cf_html_uint = clipboard_win::register_format(CF_HTML);
             let cf_rtf_uint = clipboard_win::register_format(CF_RTF);
@@ -41,16 +85,24 @@ impl ClipboardContext {
             }
             m
         };
-        Ok(ClipboardContext {
-            clipboard,
-            format_map,
-        })
+        Ok(ClipboardContext { format_map })
     }
 }
 
 impl ClipboardWatcherContext {
     pub fn new() -> Result<ClipboardWatcherContext> {
-        Ok(ClipboardWatcherContext {})
+        let window = match Window::from_builder(
+            windows_win::raw::window::Builder::new()
+                .class_name("STATIC")
+                .parent_message(),
+        ) {
+            Ok(window) => window,
+            Err(_) => return Err("create window error".into()),
+        };
+        Ok(Self {
+            handlers: Vec::new(),
+            window,
+        })
     }
 }
 
@@ -87,7 +139,7 @@ impl Clipboard for ClipboardContext {
         if format_uint.is_none() {
             return Err("format not found".into());
         }
-        let buffer = clipboard_win::get(formats::RawData(format_uint.unwrap().clone()));
+        let buffer = get_clipboard(formats::RawData(*format_uint.unwrap()));
         match buffer {
             Ok(data) => Ok(data),
             Err(_) => Err("get buffer error".into()),
@@ -95,7 +147,7 @@ impl Clipboard for ClipboardContext {
     }
 
     fn get_text(&self) -> Result<String> {
-        let string: SysResult<String> = clipboard_win::get(formats::Unicode);
+        let string: SysResult<String> = get_clipboard(formats::Unicode);
         match string {
             Ok(s) => Ok(s),
             Err(_) => Ok("".to_string()),
@@ -133,37 +185,98 @@ impl Clipboard for ClipboardContext {
     }
 
     fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
-        todo!()
+        let format_uint = self.format_map.get(format);
+        if format_uint.is_none() {
+            return Err("format not found".into());
+        }
+        let res = set_clipboard(formats::RawData(format_uint.unwrap().clone()), buffer);
+        if res.is_err() {
+            return Err("set buffer error".into());
+        }
+        Ok(())
     }
 
     fn set_text(&self, text: String) -> Result<()> {
-        todo!()
+        let res = set_clipboard(formats::Unicode, text);
+        if res.is_err() {
+            return Err("set text error".into());
+        }
+        Ok(())
     }
 
     fn set_rich_text(&self, text: String) -> Result<()> {
-        todo!()
+        let res = self.set_buffer(CF_RTF, text.as_bytes().to_vec());
+        if res.is_err() {
+            return Err("set rich text error".into());
+        }
+        Ok(())
     }
 
     fn set_html(&self, html: String) -> Result<()> {
-        todo!()
+        let cf_html = plain_html_to_cf_html(&html);
+        let res = self.set_buffer(CF_HTML, cf_html.as_bytes().to_vec());
+        if res.is_err() {
+            return Err("set html error".into());
+        }
+        Ok(())
     }
 
     fn set_image(&self, image: RustImageData) -> Result<()> {
-        todo!()
+        match image.get_format() {
+            Some(format) => {
+                if format != ImageFormat::Png {
+                    return Err("set image only support png format".into());
+                }
+            }
+            None => return Err("image format unknow".into()),
+        }
+        let res = self.set_buffer(CF_PNG, image.get_bytes().to_vec());
+        if res.is_err() {
+            return Err("set image error".into());
+        }
+        Ok(())
     }
 }
 
 impl ClipboardWatcher for ClipboardWatcherContext {
     fn add_handler(&mut self, f: CallBack) -> &mut Self {
-        todo!()
+        self.handlers.push(f);
+        self
     }
 
     fn start_watch(&mut self) {
-        todo!()
+        let _guard = ClipboardListener::new(self.window.inner()).unwrap();
+        for msg in Messages::new()
+            .window(Some(self.window.inner()))
+            .low(Some(WM_CLIPBOARDUPDATE))
+            .high(Some(WM_CLIPBOARDUPDATE))
+        {
+            match msg {
+                Ok(msg) => match msg.id() {
+                    WM_CLIPBOARDUPDATE => {
+                        let msg = msg.inner();
+
+                        //Shutdown requested
+                        if msg.lParam == -1 {
+                            break;
+                        }
+                        self.handlers.iter().for_each(|handler| {
+                            handler();
+                        });
+                    }
+                    _ => panic!("Unexpected message"),
+                },
+                Err(e) => {
+                    println!("msg: error: {:?}", e);
+                }
+            }
+        }
     }
 
-    fn get_shutdown_channel(&mut self) -> WatcherShutdown {
-        todo!()
+    fn get_shutdown_channel(&self) -> WatcherShutdown {
+        WatcherShutdown {
+            window: self.window.inner(),
+        }
     }
 }
 

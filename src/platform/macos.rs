@@ -79,7 +79,7 @@ impl ClipboardWatcher for ClipboardWatcherContext {
         self.running = false;
     }
 
-    fn get_shutdown_channel(&mut self) -> WatcherShutdown {
+    fn get_shutdown_channel(&self) -> WatcherShutdown {
         WatcherShutdown {
             stop_signal: self.stop_signal.clone(),
         }

@@ -49,7 +49,7 @@ pub trait ClipboardWatcher: Send {
 
     fn start_watch(&mut self);
 
-    fn get_shutdown_channel(&mut self) -> WatcherShutdown;
+    fn get_shutdown_channel(&self) -> WatcherShutdown;
 }
 
 impl WatcherShutdown {
