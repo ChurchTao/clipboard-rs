@@ -189,7 +189,7 @@ impl Clipboard for ClipboardContext {
         if format_uint.is_none() {
             return Err("format not found".into());
         }
-        let res = set_clipboard(formats::RawData(format_uint.unwrap().clone()), buffer);
+        let res = set_clipboard(formats::RawData(*format_uint.unwrap()), buffer);
         if res.is_err() {
             return Err("set buffer error".into());
         }
