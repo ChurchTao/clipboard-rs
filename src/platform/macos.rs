@@ -232,7 +232,6 @@ impl Clipboard for ClipboardContext {
     }
 
     fn set_text(&self, text: String) -> Result<()> {
-        
         self.write_to_clipboard(
             &[WriteToClipboardData {
                 data: text.as_ptr() as *const c_void,
@@ -245,7 +244,6 @@ impl Clipboard for ClipboardContext {
     }
 
     fn set_rich_text(&self, text: String) -> Result<()> {
-        
         self.write_to_clipboard(
             &[WriteToClipboardData {
                 data: text.as_ptr() as *const c_void,
@@ -258,7 +256,6 @@ impl Clipboard for ClipboardContext {
     }
 
     fn set_html(&self, html: String) -> Result<()> {
-        
         self.write_to_clipboard(
             &[WriteToClipboardData {
                 data: html.as_ptr() as *const c_void,
@@ -285,7 +282,6 @@ impl Clipboard for ClipboardContext {
     }
 
     fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
-        
         self.write_to_clipboard(
             &[WriteToClipboardData {
                 data: buffer.as_ptr() as *const c_void,
