@@ -232,48 +232,48 @@ impl Clipboard for ClipboardContext {
     }
 
     fn set_text(&self, text: String) -> Result<()> {
-        let res = self.write_to_clipboard(
-            &vec![WriteToClipboardData {
+        
+        self.write_to_clipboard(
+            &[WriteToClipboardData {
                 data: text.as_ptr() as *const c_void,
                 len: text.len() as u64,
                 format: Some(unsafe { NSPasteboardTypeString }),
                 custom_format: "",
             }],
             true,
-        );
-        res
+        )
     }
 
     fn set_rich_text(&self, text: String) -> Result<()> {
-        let res = self.write_to_clipboard(
-            &vec![WriteToClipboardData {
+        
+        self.write_to_clipboard(
+            &[WriteToClipboardData {
                 data: text.as_ptr() as *const c_void,
                 len: text.len() as u64,
                 format: Some(unsafe { NSPasteboardTypeRTF }),
                 custom_format: "",
             }],
             true,
-        );
-        res
+        )
     }
 
     fn set_html(&self, html: String) -> Result<()> {
-        let res = self.write_to_clipboard(
-            &vec![WriteToClipboardData {
+        
+        self.write_to_clipboard(
+            &[WriteToClipboardData {
                 data: html.as_ptr() as *const c_void,
                 len: html.len() as u64,
                 format: Some(unsafe { NSPasteboardTypeHTML }),
                 custom_format: "",
             }],
             true,
-        );
-        res
+        )
     }
 
     fn set_image(&self, image: RustImageData) -> Result<()> {
         let png = image.to_png()?;
         let res = self.write_to_clipboard(
-            &vec![WriteToClipboardData {
+            &[WriteToClipboardData {
                 data: png.get_bytes().as_ptr() as *const c_void,
                 len: png.get_bytes().len() as u64,
                 format: Some(unsafe { NSPasteboardTypePNG }),
@@ -285,16 +285,16 @@ impl Clipboard for ClipboardContext {
     }
 
     fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
-        let res = self.write_to_clipboard(
-            &vec![WriteToClipboardData {
+        
+        self.write_to_clipboard(
+            &[WriteToClipboardData {
                 data: buffer.as_ptr() as *const c_void,
                 len: buffer.len() as u64,
                 format: None,
                 custom_format: format,
             }],
             true,
-        );
-        res
+        )
     }
 
     fn clear(&self) -> Result<()> {
