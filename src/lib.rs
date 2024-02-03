@@ -29,8 +29,6 @@ pub trait Clipboard: Send {
     /// en: Get the html format content in the clipboard as string
     fn get_html(&self) -> Result<String>;
 
-    /// zh: 统一获得 png 格式的图片
-    /// en: get image in png format
     fn get_image(&self) -> Result<RustImageData>;
 
     fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()>;
