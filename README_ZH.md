@@ -2,15 +2,13 @@
 
 clipboard-rs 是一个用 Rust 语言编写的跨平台库，用于获取和设置操作系统级别的剪贴板内容。它支持 Linux、Windows 和 MacOS。
 
-目前，MacOS 的逻辑已经完成编写，我们正在继续开发 Linux 和 Windows 的逻辑。
-
 [简体中文](README_ZH.md)
 
 ## 开发计划
 
 - [x] MacOS 支持
 - [ ] Linux 支持
-- [ ] Windows 支持
+- [x] Windows 支持
 
 ## 使用方法
 
@@ -61,14 +59,13 @@ fn main() {
 
     let img = ctx.get_image().unwrap();
 
-    println!(
-        "size={:?},byte len={}",
-        img.get_size(),
-        img.get_bytes().len()
-    );
+    img.save_to_path("/tmp/test.png").unwrap();
 
-    img.save_to_file("/tmp/test.png").unwrap();
+    let resize_img = img.thumbnail(300, 300).unwrap();
+
+    resize_img.save_to_path("/tmp/test_thumbnail.png").unwrap();
 }
+
 
 ```
 

@@ -2,9 +2,15 @@ name: Test
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
+    paths-ignore:
+      - "README_ZH.md"
+      - "README.md"
   pull_request:
-    branches: [ master ]
+    branches: [master]
+    paths-ignore:
+      - "README_ZH.md"
+      - "README.md"
 
 jobs:
   clippy:

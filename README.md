@@ -2,15 +2,13 @@
 
 clipboard-rs is a cross-platform library written in Rust for getting and setting the system-level clipboard content. It supports Linux, Windows, and MacOS.
 
-Currently, the logic for MacOS has been completed, and we are continuing to develop the logic for Linux and Windows.
-
 [简体中文](README_ZH.md)
 
 ## Development Plan
 
 - [x] MacOS Support
 - [ ] Linux Support
-- [ ] Windows Support
+- [x] Windows Support
 
 ## Usage
 
@@ -61,14 +59,13 @@ fn main() {
 
     let img = ctx.get_image().unwrap();
 
-    println!(
-        "size={:?},byte len={}",
-        img.get_size(),
-        img.get_bytes().len()
-    );
+    img.save_to_path("/tmp/test.png").unwrap();
 
-    img.save_to_file("/tmp/test.png").unwrap();
+    let resize_img = img.thumbnail(300, 300).unwrap();
+
+    resize_img.save_to_path("/tmp/test_thumbnail.png").unwrap();
 }
+
 ```
 
 ### Reading Any Format
