@@ -6,7 +6,6 @@ use clipboard_win::types::c_uint;
 use clipboard_win::{
     formats, get_clipboard, raw, set_clipboard, Clipboard as ClipboardWin, SysResult,
 };
-use image::ImageFormat;
 use windows_win::sys::{
     AddClipboardFormatListener, PostMessageW, RemoveClipboardFormatListener, HWND,
     WM_CLIPBOARDUPDATE,
@@ -108,6 +107,7 @@ impl ClipboardWatcherContext {
 
 impl Clipboard for ClipboardContext {
     fn available_formats(&self) -> Result<Vec<String>> {
+        let _clip = ClipboardWin::new_attempts(10).expect("Open clipboard");
         let format_count = clipboard_win::count_formats();
         if format_count.is_none() {
             return Ok(Vec::new());
@@ -127,6 +127,7 @@ impl Clipboard for ClipboardContext {
     }
 
     fn clear(&self) -> Result<()> {
+        let _clip = ClipboardWin::new_attempts(10).expect("Open clipboard");
         let res = clipboard_win::empty();
         if res.is_err() {
             return Err("clear clipboard error".into());
@@ -222,15 +223,8 @@ impl Clipboard for ClipboardContext {
     }
 
     fn set_image(&self, image: RustImageData) -> Result<()> {
-        match image.get_format() {
-            Some(format) => {
-                if format != ImageFormat::Png {
-                    return Err("set image only support png format".into());
-                }
-            }
-            None => return Err("image format unknow".into()),
-        }
-        let res = self.set_buffer(CF_PNG, image.get_bytes().to_vec());
+        let png = image.to_png()?;
+        let res = self.set_buffer(CF_PNG, png.get_bytes().to_vec());
         if res.is_err() {
             return Err("set image error".into());
         }
