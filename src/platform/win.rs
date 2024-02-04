@@ -232,19 +232,22 @@ impl Clipboard for ClipboardContext {
     }
 
     fn has_html(&self) -> bool {
-        todo!()
+        self.has_type(&"HTML Format".to_owned())
     }
 
     fn has_text(&self) -> bool {
-        todo!()
+        self.has_type(&"CF_TEXT".to_owned())
     }
 
     fn has_rtf(&self) -> bool {
-        todo!()
+        self.has_type(&"Rich Text Format".to_owned())
     }
 
     fn has_image(&self) -> bool {
-        todo!()
+        match self.available_formats() {
+            Ok(formats) => formats.contains(&"PNG".to_owned()) && formats.contains(&"CF_BITMAP".to_owned()),
+            Err(_) => false,
+        }
     }
 }
 
