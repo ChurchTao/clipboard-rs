@@ -1,6 +1,6 @@
 pub mod common;
 mod platform;
-use common::{CallBack, Result, RustImageData};
+pub use common::{CallBack, ContentFormat, Result, RustImageData};
 pub use image::imageops::FilterType;
 use platform::WatcherShutdown;
 pub use platform::{ClipboardContext, ClipboardWatcherContext};
@@ -9,16 +9,7 @@ pub trait Clipboard: Send {
     /// en: Get all formats of the current content in the clipboard
     fn available_formats(&self) -> Result<Vec<String>>;
 
-    fn has_type(&self, format: &str) -> bool {
-        match self.available_formats() {
-            Ok(formats) => formats.contains(&format.to_owned()),
-            Err(_) => false,
-        }
-    }
-    fn has_html(&self) -> bool;
-    fn has_text(&self) -> bool;
-    fn has_rtf(&self) -> bool;
-    fn has_image(&self) -> bool;
+    fn has(&self, format: ContentFormat) -> bool;
 
     /// zh: 清空剪切板
     /// en: clear clipboard

@@ -5,6 +5,14 @@ use std::io::Cursor;
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
 pub type CallBack = Box<dyn Fn() + Send + Sync>;
 
+pub enum ContentFormat<'a> {
+    Text,
+    Rtf,
+    Html,
+    Image,
+    Other(&'a str),
+}
+
 pub struct RustImageData {
     width: u32,
     height: u32,

@@ -1,5 +1,5 @@
 use crate::common::{CallBack, Result, RustImage, RustImageData};
-use crate::{Clipboard, ClipboardWatcher};
+use crate::{Clipboard, ClipboardWatcher, ContentFormat};
 use cocoa::appkit::{
     NSPasteboard, NSPasteboardTypeHTML, NSPasteboardTypePNG, NSPasteboardTypeRTF,
     NSPasteboardTypeString,
@@ -298,20 +298,35 @@ impl Clipboard for ClipboardContext {
         Ok(())
     }
 
-    fn has_html(&self) -> bool {
-        self.has_type("public.html")
-    }
-
-    fn has_text(&self) -> bool {
-        self.has_type("public.utf8-plain-text")
-    }
-
-    fn has_rtf(&self) -> bool {
-        self.has_type("public.rtf")
-    }
-
-    fn has_image(&self) -> bool {
-        self.has_type("public.png")
+    fn has(&self, format: ContentFormat) -> bool {
+        match format {
+            ContentFormat::Text => unsafe {
+                let types = NSArray::arrayWithObject(nil, NSPasteboardTypeString);
+                // https://developer.apple.com/documentation/appkit/nspasteboard/1526078-availabletypefromarray?language=objc
+                // The first pasteboard type in types that is available on the pasteboard, or nil if the receiver does not contain any of the types in types.
+                // self.clipboard.availableTypeFromArray(types)
+                self.clipboard.availableTypeFromArray(types) != nil
+            },
+            ContentFormat::Rtf => unsafe {
+                let types = NSArray::arrayWithObject(nil, NSPasteboardTypeRTF);
+                self.clipboard.availableTypeFromArray(types) != nil
+            },
+            ContentFormat::Html => unsafe {
+                // Currently only judge whether there is a public.html format
+                let types = NSArray::arrayWithObjects(nil, &[NSPasteboardTypeHTML]);
+                self.clipboard.availableTypeFromArray(types) != nil
+            },
+            ContentFormat::Image => unsafe {
+                // Currently only judge whether there is a png format
+                let types = NSArray::arrayWithObjects(nil, &[NSPasteboardTypePNG]);
+                self.clipboard.availableTypeFromArray(types).is_null()
+            },
+            ContentFormat::Other(format) => unsafe {
+                let types =
+                    NSArray::arrayWithObjects(nil, &[NSString::alloc(nil).init_str(format)]);
+                self.clipboard.availableTypeFromArray(types).is_null()
+            },
+        }
     }
 }
 
