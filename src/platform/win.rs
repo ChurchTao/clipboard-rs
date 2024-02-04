@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::common::{CallBack, Result, RustImage, RustImageData};
-use crate::{Clipboard, ClipboardWatcher};
+use crate::{Clipboard, ClipboardWatcher, ContentFormat};
 use clipboard_win::types::c_uint;
 use clipboard_win::{
     formats, get_clipboard, raw, set_clipboard, Clipboard as ClipboardWin, SysResult,
@@ -136,11 +136,12 @@ impl Clipboard for ClipboardContext {
     }
 
     fn get_buffer(&self, format: &str) -> Result<Vec<u8>> {
-        let format_uint = self.format_map.get(format);
+        let format_uint = clipboard_win::register_format(format);
         if format_uint.is_none() {
-            return Err("format not found".into());
+            return Err("register format error".into());
         }
-        let buffer = get_clipboard(formats::RawData(*format_uint.unwrap()));
+        let format_uint = format_uint.unwrap().get();
+        let buffer = get_clipboard(formats::RawData(format_uint));
         match buffer {
             Ok(data) => Ok(data),
             Err(_) => Err("get buffer error".into()),
@@ -186,11 +187,12 @@ impl Clipboard for ClipboardContext {
     }
 
     fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
-        let format_uint = self.format_map.get(format);
+        let format_uint = clipboard_win::register_format(format);
         if format_uint.is_none() {
-            return Err("format not found".into());
+            return Err("register format error".into());
         }
-        let res = set_clipboard(formats::RawData(*format_uint.unwrap()), buffer);
+        let format_uint = format_uint.unwrap().get();
+        let res = set_clipboard(formats::RawData(format_uint), buffer);
         if res.is_err() {
             return Err("set buffer error".into());
         }
@@ -229,6 +231,31 @@ impl Clipboard for ClipboardContext {
             return Err("set image error".into());
         }
         Ok(())
+    }
+
+    fn has(&self, format: ContentFormat) -> bool {
+        match format {
+            ContentFormat::Text => clipboard_win::is_format_avail(formats::CF_UNICODETEXT),
+            ContentFormat::Rtf => {
+                let cf_rtf_uint = self.format_map.get(CF_RTF).unwrap();
+                clipboard_win::is_format_avail(*cf_rtf_uint)
+            }
+            ContentFormat::Html => {
+                let cf_html_uint = self.format_map.get(CF_HTML).unwrap();
+                clipboard_win::is_format_avail(*cf_html_uint)
+            }
+            ContentFormat::Image => {
+                let cf_png_uint = self.format_map.get(CF_PNG).unwrap();
+                clipboard_win::is_format_avail(*cf_png_uint)
+            }
+            ContentFormat::Other(format) => {
+                let format_uint = clipboard_win::register_format(format);
+                if let Some(format_uint) = format_uint {
+                    return clipboard_win::is_format_avail(format_uint.get());
+                }
+                false
+            }
+        }
     }
 }
 
