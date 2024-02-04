@@ -9,6 +9,11 @@ pub trait Clipboard: Send {
     /// en: Get all formats of the current content in the clipboard
     fn available_formats(&self) -> Result<Vec<String>>;
 
+    fn has_html(&self) -> bool;
+    fn has_text(&self) -> bool;
+    fn has_rtf(&self) -> bool;
+    fn has_image(&self) -> bool;
+
     /// zh: 清空剪切板
     /// en: clear clipboard
     fn clear(&self) -> Result<()>;

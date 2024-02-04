@@ -297,6 +297,38 @@ impl Clipboard for ClipboardContext {
         unsafe { self.clipboard.clearContents() };
         Ok(())
     }
+
+    fn has_html(&self) -> bool {
+        let available_formats = self.available_formats();
+        match available_formats {
+            Ok(formats) => formats.contains(&"public.html".to_owned()),
+            Err(_) => false,
+        }
+    }
+
+    fn has_text(&self) -> bool {
+        let available_formats = self.available_formats();
+        match available_formats {
+            Ok(formats) => formats.contains(&"public.utf8-plain-text".to_owned()),
+            Err(_) => false,
+        }
+    }
+
+    fn has_rtf(&self) -> bool {
+        let available_formats = self.available_formats();
+        match available_formats {
+            Ok(formats) => formats.contains(&"public.rtf".to_owned()),
+            Err(_) => false,
+        }
+    }
+
+    fn has_image(&self) -> bool {
+        let available_formats = self.available_formats();
+        match available_formats {
+            Ok(formats) => formats.contains(&"public.png".to_owned()),
+            Err(_) => false,
+        }
+    }
 }
 
 pub struct WatcherShutdown {

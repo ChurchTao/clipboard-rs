@@ -5,6 +5,12 @@ fn main() {
     let types = ctx.available_formats().unwrap();
     println!("{:?}", types);
 
+    let has_image = ctx.has_image();
+    let has_text = ctx.has_text();
+    let has_rtf = ctx.has_rtf();
+    let has_html = ctx.has_html();
+    println!("has_image={}, has_text={}, has_rtf={}, has_html={}", has_image, has_text, has_rtf, has_html);
+
     let rtf = ctx.get_rich_text().unwrap();
 
     println!("rtf={}", rtf);
