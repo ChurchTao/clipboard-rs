@@ -230,6 +230,22 @@ impl Clipboard for ClipboardContext {
         }
         Ok(())
     }
+
+    fn has_html(&self) -> bool {
+        todo!()
+    }
+
+    fn has_text(&self) -> bool {
+        todo!()
+    }
+
+    fn has_rtf(&self) -> bool {
+        todo!()
+    }
+
+    fn has_image(&self) -> bool {
+        todo!()
+    }
 }
 
 impl ClipboardWatcher for ClipboardWatcherContext {
