@@ -319,12 +319,12 @@ impl Clipboard for ClipboardContext {
             ContentFormat::Image => unsafe {
                 // Currently only judge whether there is a png format
                 let types = NSArray::arrayWithObjects(nil, &[NSPasteboardTypePNG]);
-                self.clipboard.availableTypeFromArray(types).is_null()
+                self.clipboard.availableTypeFromArray(types) != nil
             },
             ContentFormat::Other(format) => unsafe {
                 let types =
                     NSArray::arrayWithObjects(nil, &[NSString::alloc(nil).init_str(format)]);
-                self.clipboard.availableTypeFromArray(types).is_null()
+                self.clipboard.availableTypeFromArray(types) != nil
             },
         }
     }

@@ -1,6 +1,6 @@
 use clipboard_rs::{
     common::{RustImage, RustImageData},
-    Clipboard, ClipboardContext,
+    Clipboard, ClipboardContext, ContentFormat,
 };
 use image::{ImageBuffer, Rgba, RgbaImage};
 use std::io::Cursor;
@@ -22,6 +22,8 @@ fn test_image() {
     let rust_img = RustImageData::from_bytes(&buf.clone().into_inner()).unwrap();
 
     ctx.set_image(rust_img).unwrap();
+
+    assert!(ctx.has(ContentFormat::Image));
 
     let clipboard_img = ctx.get_image().unwrap();
 

@@ -245,6 +245,7 @@ impl Clipboard for ClipboardContext {
                 clipboard_win::is_format_avail(*cf_html_uint)
             }
             ContentFormat::Image => {
+                // Currently only judge whether there is a png format
                 let cf_png_uint = self.format_map.get(CF_PNG).unwrap();
                 clipboard_win::is_format_avail(*cf_png_uint)
             }
