@@ -1,6 +1,6 @@
 [package]
 name = "clipboard-rs"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["ChurchTao <swkzymlyy@gmail.com>"]
 description = "cross-platform library for getting and setting the contents of the OS-level clipboard."
 repository = "https://github.com/ChurchTao/clipboard-rs"
@@ -21,4 +21,4 @@ windows-win = "3.0.0"
 cocoa = "0.25.0"
 
 [target.'cfg(all(unix, not(any(target_os="macos", target_os="android", target_os="ios", target_os="emscripten"))))'.dependencies]
-x11rb = { version = "0.13.0", features = ["xfixes"]}
+x11rb = { version = "0.13.0", features = ["xfixes"] }

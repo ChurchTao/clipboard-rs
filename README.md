@@ -7,17 +7,16 @@ clipboard-rs is a cross-platform library written in Rust for getting and setting
 ## Development Plan
 
 - [x] MacOS Support
-- [ ] Linux Support
+- [x] Linux Support (x11)
 - [x] Windows Support
 
 ## Usage
 
-It's not ready for use yet, as it hasn't been released. Please check back after the first release version is published.
 Add the following content to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-clipboard-rs = "0.0.1"
+clipboard-rs = "0.1.0"
 ```
 
 ## Examples
@@ -115,6 +114,15 @@ fn main() {
 }
 
 ```
+
+## Contributing
+
+You are welcome to submit PRs and issues and contribute your code or ideas to the project. Due to my limited level, the library may also have bugs. You are welcome to point them out and I will modify them as soon as possible.
+
+## Thanks
+
+- API design is inspired by [electron](https://www.electronjs.org/zh/docs/latest/api/clipboard)
+- Linux part of the project code is referenced from [x11-clipboard](https://github.com/quininer/x11-clipboard/tree/master)
 
 ## License
 

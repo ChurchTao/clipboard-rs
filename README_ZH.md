@@ -2,22 +2,19 @@
 
 clipboard-rs 是一个用 Rust 语言编写的跨平台库，用于获取和设置操作系统级别的剪贴板内容。它支持 Linux、Windows 和 MacOS。
 
-[简体中文](README_ZH.md)
-
 ## 开发计划
 
 - [x] MacOS 支持
-- [ ] Linux 支持
+- [x] Linux 支持 (x11)
 - [x] Windows 支持
 
 ## 使用方法
 
-暂时还没用哦，还没发布，等发布第一个 release 版本后再来看看吧。
 在 `Cargo.toml` 中添加如下内容：
 
 ```toml
 [dependencies]
-clipboard-rs = "0.0.1"
+clipboard-rs = "0.1.0"
 ```
 
 ## 示例
@@ -116,6 +113,15 @@ fn main() {
 }
 
 ```
+
+## 贡献
+
+欢迎提交 PR 和 issue，为项目贡献你的代码或者想法。由于本人水平有限，库也可能会有 bug，欢迎大家指出，我会第一时间修改。
+
+## 感谢
+
+- API 设计灵感来自于 [electron](https://www.electronjs.org/zh/docs/latest/api/clipboard)
+- Linux 部分项目代码参考自 [x11-clipboard](https://github.com/quininer/x11-clipboard/tree/master)
 
 ## 许可证
 
