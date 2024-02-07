@@ -2,9 +2,10 @@
 name = "clipboard-rs"
 version = "0.1.0"
 authors = ["ChurchTao <swkzymlyy@gmail.com>"]
-description = "cross-platform library for getting and setting the contents of the OS-level clipboard."
+description = "Cross-platform clipboard API (text | image | rich text | html | monitoring changes) | 跨平台剪贴板 API(文本|图片|富文本|html|监听变化) Windows,MacOS,Linux"
 repository = "https://github.com/ChurchTao/clipboard-rs"
 documentation = "https://docs.rs/clipboard-rs"
+license = "MIT"
 readme = "README.md"
 keywords = ["clipboard"]
 edition = "2021"
