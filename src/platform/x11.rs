@@ -632,7 +632,7 @@ impl ClipboardWatcher for ClipboardWatcherContext {
         )
         .expect("Failed to select selection input");
 
-        let _ = cookie.check().unwrap();
+        cookie.check().unwrap();
 
         loop {
             if self
@@ -652,11 +652,8 @@ impl ClipboardWatcher for ClipboardWatcherContext {
                     continue;
                 }
             };
-            match event {
-                Event::XfixesSelectionNotify(_) => {
-                    self.handlers.iter().for_each(|f| f());
-                }
-                _ => {}
+            if let Event::XfixesSelectionNotify(_) = event {
+                self.handlers.iter().for_each(|f| f());
             }
         }
     }
