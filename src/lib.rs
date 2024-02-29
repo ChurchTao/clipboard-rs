@@ -2,8 +2,7 @@ pub mod common;
 mod platform;
 pub use common::{CallBack, ContentFormat, Result, RustImageData};
 pub use image::imageops::FilterType;
-use platform::WatcherShutdown;
-pub use platform::{ClipboardContext, ClipboardWatcherContext};
+pub use platform::{ClipboardContext, ClipboardWatcherContext, WatcherShutdown};
 pub trait Clipboard: Send {
     /// zh: 获得剪切板当前内容的所有格式
     /// en: Get all formats of the current content in the clipboard
