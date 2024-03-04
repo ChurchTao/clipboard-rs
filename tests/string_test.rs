@@ -1,4 +1,6 @@
-use clipboard_rs::{Clipboard, ClipboardContent, ClipboardContext, ContentFormat};
+use clipboard_rs::{
+    common::ContentData, Clipboard, ClipboardContent, ClipboardContext, ContentFormat,
+};
 
 #[test]
 fn test_string() {
@@ -34,4 +36,19 @@ fn test_string() {
     assert_eq!(ctx.get_text().unwrap(), test_plain_txt);
     assert_eq!(ctx.get_rich_text().unwrap(), test_rich_txt);
     assert_eq!(ctx.get_html().unwrap(), test_html);
+
+    let content_arr = ctx
+        .get(&[ContentFormat::Text, ContentFormat::Rtf, ContentFormat::Html])
+        .unwrap();
+
+    assert_eq!(content_arr.len(), 3);
+    for c in content_arr {
+        let content_str = c.as_str().unwrap();
+        match c.get_format() {
+            ContentFormat::Text => assert_eq!(content_str, test_plain_txt),
+            ContentFormat::Rtf => assert_eq!(content_str, test_rich_txt),
+            ContentFormat::Html => assert_eq!(content_str, test_html),
+            _ => panic!("unexpected format"),
+        }
+    }
 }
