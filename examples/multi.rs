@@ -1,4 +1,6 @@
-use clipboard_rs::{Clipboard, ClipboardContent, ClipboardContext, ContentFormat};
+use clipboard_rs::{
+    common::ContentData, Clipboard, ClipboardContent, ClipboardContext, ContentFormat,
+};
 
 fn main() {
     let ctx = ClipboardContext::new().unwrap();
@@ -24,21 +26,11 @@ fn main() {
     let types = ctx.available_formats().unwrap();
     println!("{:?}", types);
 
-    let has_rtf = ctx.has(ContentFormat::Rtf);
-    println!("has_rtf={}", has_rtf);
+    let read = ctx
+        .get(&[ContentFormat::Text, ContentFormat::Rtf, ContentFormat::Html])
+        .unwrap();
 
-    let rtf = ctx.get_rich_text().unwrap();
-
-    println!("rtf={}", rtf);
-
-    let has_html = ctx.has(ContentFormat::Html);
-    println!("has_html={}", has_html);
-
-    let html = ctx.get_html().unwrap();
-
-    println!("html={}", html);
-
-    let content = ctx.get_text().unwrap();
-
-    println!("txt={}", content);
+    for c in read {
+        println!("{}", c.as_str().unwrap());
+    }
 }
