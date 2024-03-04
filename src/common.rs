@@ -65,8 +65,7 @@ impl ClipboardContent {
         match &mut self.multi_data {
             Some(multi) => multi.push(data),
             None => {
-                let mut multi = Vec::new();
-                multi.push(data);
+                let multi = vec![data];
                 self.multi_data = Some(multi);
             }
         }

@@ -417,7 +417,7 @@ impl Clipboard for ClipboardContext {
             return Ok(res);
         }
         for format in formats {
-            let content = convert_to_clipboard_content(&ns_pastboard_item_arr, &format);
+            let content = convert_to_clipboard_content(&ns_pastboard_item_arr, format);
             res.push(content);
         }
         Ok(res)
@@ -495,7 +495,7 @@ fn convert_to_clipboard_content(
     ns_pastboard_item_arr: &Vec<id>,
     format: &ContentFormat,
 ) -> ClipboardContent {
-    let res = unsafe {
+    unsafe {
         let mut content = ClipboardContent::new(format.clone());
         for ns_pastboard_item in ns_pastboard_item_arr {
             let ns_type = {
@@ -524,8 +524,7 @@ fn convert_to_clipboard_content(
             content.put_data(bytes.to_vec());
         }
         content
-    };
-    res
+    }
 }
 
 pub struct WatcherShutdown {
