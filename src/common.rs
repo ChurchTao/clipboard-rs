@@ -5,12 +5,124 @@ use std::io::Cursor;
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
 pub type CallBack = Box<dyn Fn() + Send + Sync>;
 
-pub enum ContentFormat<'a> {
+pub trait ContentData {
+    fn get_format(&self) -> &ContentFormat;
+
+    fn as_bytes(&self) -> &[u8];
+
+    fn as_array(&self) -> &[ClipboardContent];
+
+    fn as_str(&self) -> Result<&str>;
+
+    fn as_image(&self) -> Result<RustImageData>;
+}
+
+pub struct ClipboardContent {
+    format: ContentFormat,
+    data: Option<Vec<u8>>,
+    // maybe there is multiple data like files
+    multi_data: Option<Vec<ClipboardContent>>,
+}
+
+impl ClipboardContent {
+    pub fn new(format: ContentFormat) -> Self {
+        ClipboardContent {
+            format,
+            data: None,
+            multi_data: None,
+        }
+    }
+
+    pub fn new_with_data(format: ContentFormat, data: Vec<u8>) -> Self {
+        ClipboardContent {
+            format,
+            data: Some(data),
+            multi_data: None,
+        }
+    }
+
+    pub fn new_with_multi_data(format: ContentFormat, data: Vec<ClipboardContent>) -> Self {
+        ClipboardContent {
+            format,
+            data: None,
+            multi_data: Some(data),
+        }
+    }
+
+    pub fn is_multi(&self) -> bool {
+        self.multi_data.is_some()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.data.is_none()
+    }
+
+    pub fn put_data(&mut self, data: Vec<u8>) {
+        self.data = Some(data);
+    }
+
+    pub fn put_multi_data(&mut self, data: ClipboardContent) {
+        match &mut self.multi_data {
+            Some(multi) => multi.push(data),
+            None => {
+                let mut multi = Vec::new();
+                multi.push(data);
+                self.multi_data = Some(multi);
+            }
+        }
+    }
+}
+
+impl ContentData for ClipboardContent {
+    fn get_format(&self) -> &ContentFormat {
+        &self.format
+    }
+
+    fn as_bytes(&self) -> &[u8] {
+        match &self.data {
+            Some(data) => data.as_slice(),
+            None => &[],
+        }
+    }
+
+    fn as_str(&self) -> Result<&str> {
+        if let Some(data) = &self.data {
+            return match self.format {
+                ContentFormat::Image => Err("can't convert image to string".into()),
+                ContentFormat::Other(_) => std::str::from_utf8(data).map_err(|e| e.into()),
+                _ => std::str::from_utf8(data).map_err(|e| e.into()),
+            };
+        }
+        Err("content is empty".into())
+    }
+
+    fn as_image(&self) -> Result<RustImageData> {
+        if let ContentFormat::Image = self.format {
+            if let Some(data) = &self.data {
+                return RustImageData::from_bytes(data);
+            }
+            Err("image data is empty".into())
+        } else {
+            Err("content is not image".into())
+        }
+    }
+
+    fn as_array(&self) -> &[ClipboardContent] {
+        match &self.multi_data {
+            Some(data) => data.as_slice(),
+            None => &[],
+        }
+    }
+}
+
+#[derive(Clone)]
+pub enum ContentFormat {
     Text,
     Rtf,
     Html,
     Image,
-    Other(&'a str),
+    Files,
+    Other(String),
 }
 
 pub struct RustImageData {
@@ -19,6 +131,7 @@ pub struct RustImageData {
     data: Option<DynamicImage>,
 }
 
+/// 此处的 RustImageBuffer 已经是带有图片格式的字节流，例如 png,jpeg;
 pub struct RustImageBuffer(Vec<u8>);
 
 pub trait RustImage: Sized {

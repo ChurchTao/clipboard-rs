@@ -1,15 +1,17 @@
-use crate::common::{CallBack, Result, RustImage, RustImageData};
-use crate::{Clipboard, ClipboardWatcher, ContentFormat};
+use crate::common::{CallBack, ContentData, Result, RustImage, RustImageData};
+use crate::{Clipboard, ClipboardContent, ClipboardWatcher, ContentFormat};
 use cocoa::appkit::{
-    NSPasteboard, NSPasteboardTypeHTML, NSPasteboardTypePNG, NSPasteboardTypeRTF,
-    NSPasteboardTypeString,
+    NSFilenamesPboardType, NSPasteboard, NSPasteboardTypeHTML, NSPasteboardTypePNG,
+    NSPasteboardTypeRTF, NSPasteboardTypeString,
 };
 use cocoa::base::{id, nil};
 use cocoa::foundation::{NSArray, NSData, NSFastEnumeration, NSString};
 use std::ffi::{c_void, CStr};
-use std::slice;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
+use std::{slice, vec};
+
+const NS_FILES: &str = "public.file-url";
 
 // required for Send trait because *mut runtime::Object; cannot be sent between threads safely
 pub struct SafeId(id);
@@ -107,6 +109,18 @@ impl ClipboardContext {
         Ok(clipboard_ctx)
     }
 
+    /// Read from clipboard return trait by NSPasteboardItem
+    fn read_from_clipboard(&self) -> Result<Vec<id>> {
+        let res = unsafe {
+            let ns_array: id = self.clipboard.pasteboardItems();
+            if ns_array.count() == 0 {
+                return Ok(Vec::new());
+            }
+            ns_array.iter().collect::<Vec<id>>()
+        };
+        Ok(res)
+    }
+
     // learn from https://github.com/zed-industries/zed/blob/79c1003b344ee513cf97ee8313c38c7c3f02c916/crates/gpui/src/platform/mac/platform.rs#L793
     fn write_to_clipboard(&self, data: &[WriteToClipboardData], with_clear: bool) -> Result<()> {
         if with_clear {
@@ -115,14 +129,28 @@ impl ClipboardContext {
             }
         }
         data.iter().for_each(|d| unsafe {
-            let ns_data = NSData::dataWithBytes_length_(nil, d.data, d.len);
-            if let Some(format) = d.format {
-                self.clipboard.setData_forType(ns_data, format);
-            } else {
-                let custom_format = NSString::alloc(nil).init_str(d.custom_format);
+            let ns_type = match d.format.clone() {
+                ContentFormat::Text => NSPasteboardTypeString,
+                ContentFormat::Rtf => NSPasteboardTypeRTF,
+                ContentFormat::Html => NSPasteboardTypeHTML,
+                ContentFormat::Image => NSPasteboardTypePNG,
+                ContentFormat::Files => NSFilenamesPboardType,
+                ContentFormat::Other(other_format) => {
+                    NSString::alloc(nil).init_str(other_format.as_str())
+                }
+            };
+            if let ContentFormat::Other(_) | ContentFormat::Files = d.format {
                 self.clipboard
-                    .declareTypes_owner(NSArray::arrayWithObject(nil, custom_format), nil);
-                self.clipboard.setData_forType(ns_data, custom_format);
+                    .declareTypes_owner(NSArray::arrayWithObject(nil, ns_type), nil);
+            }
+            if d.is_multi {
+                self.clipboard.setPropertyList_forType(
+                    NSArray::arrayByAddingObjectsFromArray(nil, d.data),
+                    ns_type,
+                );
+            } else {
+                let ns_data = d.data;
+                self.clipboard.setData_forType(ns_data, ns_type);
             }
         });
         Ok(())
@@ -132,11 +160,10 @@ impl ClipboardContext {
 unsafe impl Send for ClipboardContext {}
 unsafe impl Sync for ClipboardContext {}
 
-struct WriteToClipboardData<'a> {
-    data: *const c_void,
-    len: u64,
-    format: Option<id>,
-    custom_format: &'a str,
+struct WriteToClipboardData {
+    data: id,
+    format: ContentFormat,
+    is_multi: bool,
 }
 
 impl Clipboard for ClipboardContext {
@@ -234,10 +261,15 @@ impl Clipboard for ClipboardContext {
     fn set_text(&self, text: String) -> Result<()> {
         self.write_to_clipboard(
             &[WriteToClipboardData {
-                data: text.as_ptr() as *const c_void,
-                len: text.len() as u64,
-                format: Some(unsafe { NSPasteboardTypeString }),
-                custom_format: "",
+                data: unsafe {
+                    NSData::dataWithBytes_length_(
+                        nil,
+                        text.as_ptr() as *const c_void,
+                        text.len() as u64,
+                    )
+                },
+                is_multi: false,
+                format: ContentFormat::Text,
             }],
             true,
         )
@@ -246,10 +278,15 @@ impl Clipboard for ClipboardContext {
     fn set_rich_text(&self, text: String) -> Result<()> {
         self.write_to_clipboard(
             &[WriteToClipboardData {
-                data: text.as_ptr() as *const c_void,
-                len: text.len() as u64,
-                format: Some(unsafe { NSPasteboardTypeRTF }),
-                custom_format: "",
+                data: unsafe {
+                    NSData::dataWithBytes_length_(
+                        nil,
+                        text.as_ptr() as *const c_void,
+                        text.len() as u64,
+                    )
+                },
+                is_multi: false,
+                format: ContentFormat::Rtf,
             }],
             true,
         )
@@ -258,10 +295,15 @@ impl Clipboard for ClipboardContext {
     fn set_html(&self, html: String) -> Result<()> {
         self.write_to_clipboard(
             &[WriteToClipboardData {
-                data: html.as_ptr() as *const c_void,
-                len: html.len() as u64,
-                format: Some(unsafe { NSPasteboardTypeHTML }),
-                custom_format: "",
+                data: unsafe {
+                    NSData::dataWithBytes_length_(
+                        nil,
+                        html.as_ptr() as *const c_void,
+                        html.len() as u64,
+                    )
+                },
+                is_multi: false,
+                format: ContentFormat::Html,
             }],
             true,
         )
@@ -271,10 +313,15 @@ impl Clipboard for ClipboardContext {
         let png = image.to_png()?;
         let res = self.write_to_clipboard(
             &[WriteToClipboardData {
-                data: png.get_bytes().as_ptr() as *const c_void,
-                len: png.get_bytes().len() as u64,
-                format: Some(unsafe { NSPasteboardTypePNG }),
-                custom_format: "",
+                data: unsafe {
+                    NSData::dataWithBytes_length_(
+                        nil,
+                        png.get_bytes().as_ptr() as *const c_void,
+                        png.get_bytes().len() as u64,
+                    )
+                },
+                is_multi: false,
+                format: ContentFormat::Image,
             }],
             true,
         );
@@ -284,10 +331,15 @@ impl Clipboard for ClipboardContext {
     fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
         self.write_to_clipboard(
             &[WriteToClipboardData {
-                data: buffer.as_ptr() as *const c_void,
-                len: buffer.len() as u64,
-                format: None,
-                custom_format: format,
+                data: unsafe {
+                    NSData::dataWithBytes_length_(
+                        nil,
+                        buffer.as_ptr() as *const c_void,
+                        buffer.len() as u64,
+                    )
+                },
+                is_multi: false,
+                format: ContentFormat::Other(format.to_owned()),
             }],
             true,
         )
@@ -321,13 +373,159 @@ impl Clipboard for ClipboardContext {
                 let types = NSArray::arrayWithObjects(nil, &[NSPasteboardTypePNG]);
                 self.clipboard.availableTypeFromArray(types) != nil
             },
-            ContentFormat::Other(format) => unsafe {
+            ContentFormat::Files => unsafe {
+                // Currently only judge whether there is a public.file-url format
                 let types =
-                    NSArray::arrayWithObjects(nil, &[NSString::alloc(nil).init_str(format)]);
+                    NSArray::arrayWithObjects(nil, &[NSString::alloc(nil).init_str(NS_FILES)]);
+                self.clipboard.availableTypeFromArray(types) != nil
+            },
+            ContentFormat::Other(format) => unsafe {
+                let types = NSArray::arrayWithObjects(
+                    nil,
+                    &[NSString::alloc(nil).init_str(format.as_str())],
+                );
                 self.clipboard.availableTypeFromArray(types) != nil
             },
         }
     }
+
+    fn get_files(&self) -> Result<Vec<String>> {
+        let res = unsafe {
+            let ns_array: id = self.clipboard.pasteboardItems();
+            if ns_array.count() == 0 {
+                return Ok(vec![]);
+            }
+            ns_array
+                .iter()
+                .map(|ns_pastboard_item| {
+                    let ns_string: id =
+                        ns_pastboard_item.stringForType(NSString::alloc(nil).init_str(NS_FILES));
+                    let bytes = ns_string.UTF8String();
+                    let c_str = CStr::from_ptr(bytes);
+                    let str_slice = c_str.to_str()?;
+                    Ok(str_slice.to_owned())
+                })
+                .collect::<Result<Vec<String>>>()?
+        };
+        Ok(res)
+    }
+
+    fn get(&self, formats: &[ContentFormat]) -> Result<Vec<ClipboardContent>> {
+        let ns_pastboard_item_arr = self.read_from_clipboard()?;
+        let mut res: Vec<ClipboardContent> = vec![];
+        if ns_pastboard_item_arr.is_empty() {
+            return Ok(res);
+        }
+        for format in formats {
+            let content = convert_to_clipboard_content(&ns_pastboard_item_arr, &format);
+            res.push(content);
+        }
+        Ok(res)
+    }
+
+    fn set_files(&self, file: Vec<String>) -> Result<()> {
+        unsafe {
+            let ns_string_arr = file
+                .iter()
+                .map(|f| NSString::alloc(nil).init_str(f))
+                .collect::<Vec<id>>();
+            self.clipboard
+                .declareTypes_owner(NSArray::arrayWithObject(nil, NSFilenamesPboardType), nil);
+            self.clipboard.setPropertyList_forType(
+                NSArray::arrayWithObjects(nil, ns_string_arr.as_ref()),
+                NSFilenamesPboardType,
+            );
+        }
+        Ok(())
+    }
+
+    fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
+        let mut write_data_vec = vec![];
+        for content in contents {
+            let write_data = content.to_write_data()?;
+            write_data_vec.push(write_data);
+        }
+        self.write_to_clipboard(&write_data_vec, true)
+    }
+}
+
+impl ClipboardContent {
+    fn to_write_data(&self) -> Result<WriteToClipboardData> {
+        if self.is_empty() {
+            return Err("content is empty".into());
+        }
+        let format = self.get_format();
+        if self.is_multi() {
+            let data_vec = self
+                .as_array()
+                .iter()
+                .map(|c| unsafe {
+                    NSData::dataWithBytes_length_(
+                        nil,
+                        c.as_bytes().as_ptr() as *const c_void,
+                        c.as_bytes().len() as u64,
+                    )
+                })
+                .collect::<Vec<id>>();
+            let ns_array = unsafe { NSArray::arrayWithObjects(nil, data_vec.as_ref()) };
+            let write_data = WriteToClipboardData {
+                data: ns_array,
+                is_multi: true,
+                format: format.clone(),
+            };
+            Ok(write_data)
+        } else {
+            let write_data = WriteToClipboardData {
+                data: unsafe {
+                    NSData::dataWithBytes_length_(
+                        nil,
+                        self.as_bytes().as_ptr() as *const c_void,
+                        self.as_bytes().len() as u64,
+                    )
+                },
+                is_multi: false,
+                format: format.clone(),
+            };
+            Ok(write_data)
+        }
+    }
+}
+
+fn convert_to_clipboard_content(
+    ns_pastboard_item_arr: &Vec<id>,
+    format: &ContentFormat,
+) -> ClipboardContent {
+    let res = unsafe {
+        let mut content = ClipboardContent::new(format.clone());
+        for ns_pastboard_item in ns_pastboard_item_arr {
+            let ns_type = {
+                match format {
+                    ContentFormat::Text => NSPasteboardTypeString,
+                    ContentFormat::Rtf => NSPasteboardTypeRTF,
+                    ContentFormat::Html => NSPasteboardTypeHTML,
+                    ContentFormat::Image => NSPasteboardTypePNG,
+                    ContentFormat::Files => NSString::alloc(nil).init_str(NS_FILES),
+                    ContentFormat::Other(other_format) => {
+                        NSString::alloc(nil).init_str(other_format.as_str())
+                    }
+                }
+            };
+            let ns_data = ns_pastboard_item.dataForType(ns_type);
+            if ns_data.length() == 0 {
+                continue;
+            }
+            let length: usize = ns_data.length() as usize;
+            let bytes = slice::from_raw_parts(ns_data.bytes() as *const u8, length);
+            if !content.is_empty() {
+                let mut child = ClipboardContent::new(format.clone());
+                child.put_data(bytes.to_vec());
+                content.put_multi_data(child);
+            }
+            content.put_data(bytes.to_vec());
+        }
+        content
+    };
+    res
 }
 
 pub struct WatcherShutdown {

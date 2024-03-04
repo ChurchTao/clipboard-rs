@@ -1,6 +1,6 @@
 pub mod common;
 mod platform;
-pub use common::{CallBack, ContentFormat, Result, RustImageData};
+pub use common::{CallBack, ClipboardContent, ContentFormat, Result, RustImageData};
 pub use image::imageops::FilterType;
 pub use platform::{ClipboardContext, ClipboardWatcherContext, WatcherShutdown};
 pub trait Clipboard: Send {
@@ -32,6 +32,10 @@ pub trait Clipboard: Send {
 
     fn get_image(&self) -> Result<RustImageData>;
 
+    fn get_files(&self) -> Result<Vec<String>>;
+
+    fn get(&self, formats: &[ContentFormat]) -> Result<Vec<ClipboardContent>>;
+
     fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()>;
 
     fn set_text(&self, text: String) -> Result<()>;
@@ -41,6 +45,10 @@ pub trait Clipboard: Send {
     fn set_html(&self, html: String) -> Result<()>;
 
     fn set_image(&self, image: RustImageData) -> Result<()>;
+
+    fn set_files(&self, files: Vec<String>) -> Result<()>;
+
+    fn set(&self, contents: Vec<ClipboardContent>) -> Result<()>;
 }
 
 pub trait ClipboardWatcher: Send {
