@@ -1,11 +1,14 @@
 use std::collections::HashMap;
 
-use crate::common::{CallBack, Result, RustImage, RustImageData};
-use crate::{Clipboard, ClipboardWatcher, ContentFormat};
+use crate::common::{CallBack, ContentData, Result, RustImage, RustImageData};
+use crate::{Clipboard, ClipboardContent, ClipboardWatcher, ContentFormat};
+use clipboard_win::raw::set_without_clear;
 use clipboard_win::types::c_uint;
 use clipboard_win::{
-    formats, get_clipboard, raw, set_clipboard, Clipboard as ClipboardWin, SysResult,
+    formats, get, get_clipboard, raw, set_clipboard, Clipboard as ClipboardWin, Getter, Setter,
+    SysResult,
 };
+use image::EncodableLayout;
 use windows_win::sys::{
     AddClipboardFormatListener, PostMessageW, RemoveClipboardFormatListener, HWND,
     WM_CLIPBOARDUPDATE,
@@ -85,6 +88,17 @@ impl ClipboardContext {
             m
         };
         Ok(ClipboardContext { format_map })
+    }
+
+    fn get_format(&self, format: &ContentFormat) -> c_uint {
+        match format {
+            ContentFormat::Text => formats::CF_UNICODETEXT,
+            ContentFormat::Rtf => *self.format_map.get(CF_RTF).unwrap(),
+            ContentFormat::Html => *self.format_map.get(CF_HTML).unwrap(),
+            ContentFormat::Image => *self.format_map.get(CF_PNG).unwrap(),
+            ContentFormat::Files => formats::CF_HDROP,
+            ContentFormat::Other(format) => clipboard_win::register_format(format).unwrap().get(),
+        }
     }
 }
 
@@ -249,14 +263,127 @@ impl Clipboard for ClipboardContext {
                 let cf_png_uint = self.format_map.get(CF_PNG).unwrap();
                 clipboard_win::is_format_avail(*cf_png_uint)
             }
+            ContentFormat::Files => clipboard_win::is_format_avail(formats::CF_HDROP),
             ContentFormat::Other(format) => {
-                let format_uint = clipboard_win::register_format(format);
+                let format_uint = clipboard_win::register_format(format.as_str());
                 if let Some(format_uint) = format_uint {
                     return clipboard_win::is_format_avail(format_uint.get());
                 }
                 false
             }
         }
+    }
+
+    fn get_files(&self) -> Result<Vec<String>> {
+        let files: SysResult<Vec<String>> = get_clipboard(formats::FileList);
+        match files {
+            Ok(f) => Ok(f),
+            Err(_) => Ok(Vec::new()),
+        }
+    }
+
+    fn get(&self, formats: &[ContentFormat]) -> Result<Vec<ClipboardContent>> {
+        let _clip = ClipboardWin::new_attempts(10).expect("Open clipboard");
+        let mut res = Vec::new();
+        for format in formats {
+            match format {
+                ContentFormat::Text => {
+                    let mut data = Vec::new();
+                    let r = formats::Unicode.read_clipboard(&mut data);
+                    match r {
+                        Ok(_) => {
+                            res.push(ClipboardContent::new_with_data(format.clone(), data));
+                        }
+                        Err(_) => continue,
+                    }
+                }
+                ContentFormat::Rtf
+                | ContentFormat::Html
+                | ContentFormat::Image
+                | ContentFormat::Other(_) => {
+                    let format_uint = self.get_format(format);
+                    let buffer = get(formats::RawData(format_uint));
+                    match buffer {
+                        Ok(buffer) => {
+                            res.push(ClipboardContent::new_with_data(format.clone(), buffer));
+                        }
+                        Err(_) => continue,
+                    }
+                }
+                ContentFormat::Files => {
+                    let files = self.get_files();
+                    match files {
+                        Ok(files) => {
+                            if files.is_empty() {
+                                continue;
+                            }
+                            let mut clipboard_multi_res = ClipboardContent::new(format.clone());
+                            files.iter().for_each(|file_path_string| {
+                                let file_path_buffer = file_path_string.as_bytes().to_vec();
+                                if clipboard_multi_res.is_empty() {
+                                    clipboard_multi_res.put_data(file_path_buffer.clone());
+                                }
+                                let data = ClipboardContent::new_with_data(
+                                    format.clone(),
+                                    file_path_buffer,
+                                );
+                                clipboard_multi_res.put_multi_data(data);
+                            });
+                            res.push(clipboard_multi_res);
+                        }
+                        Err(_) => continue,
+                    }
+                }
+            }
+        }
+        Ok(res)
+    }
+
+    fn set_files(&self, files: Vec<String>) -> Result<()> {
+        let _clip = ClipboardWin::new_attempts(10).expect("Open clipboard");
+        let res = formats::FileList.write_clipboard(&files);
+        if res.is_err() {
+            return Err("set files error".into());
+        }
+        Ok(())
+    }
+
+    fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
+        let _clip = ClipboardWin::new_attempts(10).expect("Open clipboard");
+        for content in contents {
+            match content.get_format() {
+                ContentFormat::Text => {
+                    let format_uint = formats::CF_UNICODETEXT;
+                    let u16_str = utf8_to_utf16(content.as_str().unwrap());
+                    let res = set_without_clear(format_uint, u16_str.as_bytes());
+                    if res.is_err() {
+                        continue;
+                    }
+                }
+                ContentFormat::Rtf
+                | ContentFormat::Html
+                | ContentFormat::Image
+                | ContentFormat::Other(_) => {
+                    let format_uint = self.get_format(content.get_format());
+                    let res = set_without_clear(format_uint, content.as_bytes());
+                    if res.is_err() {
+                        continue;
+                    }
+                }
+                ContentFormat::Files => {
+                    let file_path_arr = content
+                        .as_array()
+                        .iter()
+                        .map(|c| c.as_str().unwrap())
+                        .collect::<Vec<&str>>();
+                    let res = formats::FileList.write_clipboard(&file_path_arr);
+                    if res.is_err() {
+                        continue;
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -403,4 +530,11 @@ fn plain_html_to_cf_html(fragment: &str) -> String {
     replace_placeholder(end_fragment_header_value_pos, &end_fragment_pos_value);
 
     buffer
+}
+
+/// 将输入的 UTF-8 字符串转换为宽字符（UTF-16）字符串
+fn utf8_to_utf16(input: &str) -> Vec<u16> {
+    let mut vec: Vec<u16> = input.encode_utf16().collect();
+    vec.push(0);
+    vec
 }

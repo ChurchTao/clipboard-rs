@@ -5,8 +5,8 @@ fn main() {
 
     // change the file paths to your own
     let files = vec![
-        "file:///Users/churcht/Downloads/IMG_2343.JPG".to_string(),
-        "file:///Users/churcht/Downloads/cmdk-main.zip".to_string(),
+        "C:\\Users\\churcht\\test.png".to_string(),
+        "C:\\Users\\churcht\\test_resize.png".to_string(),
     ];
 
     ctx.set_files(files).unwrap();

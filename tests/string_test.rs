@@ -9,7 +9,7 @@ fn test_string() {
     let types = ctx.available_formats().unwrap();
     println!("{:?}", types);
 
-    let test_plain_txt = "hello world";
+    let test_plain_txt = "hell@$#%^&U都98好的😊o Rust!!!";
     ctx.set_text(test_plain_txt.to_string()).unwrap();
     assert!(ctx.has(ContentFormat::Text));
     assert_eq!(ctx.get_text().unwrap(), test_plain_txt);

@@ -6,7 +6,10 @@ fn main() {
     let ctx = ClipboardContext::new().unwrap();
 
     let contents: Vec<ClipboardContent> = vec![
-        ClipboardContent::new_with_data(ContentFormat::Text, "hello Rust".as_bytes().to_vec()),
+        ClipboardContent::new_with_data(
+            ContentFormat::Text,
+            "hell@$#%^&U都98好的😊o Rust!!!".as_bytes().to_vec(),
+        ),
         ClipboardContent::new_with_data(
             ContentFormat::Rtf,
             "\x1b[1m\x1b[4m\x1b[31mHello, Rust!\x1b[0m"
