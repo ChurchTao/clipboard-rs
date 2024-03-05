@@ -6,110 +6,67 @@ pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync + 'stati
 pub type CallBack = Box<dyn Fn() + Send + Sync>;
 
 pub trait ContentData {
-    fn get_format(&self) -> &ContentFormat;
+    fn get_format(&self) -> ContentFormat;
 
     fn as_bytes(&self) -> &[u8];
 
-    fn as_array(&self) -> &[ClipboardContent];
-
     fn as_str(&self) -> Result<&str>;
-
-    fn as_image(&self) -> Result<RustImageData>;
 }
 
-pub struct ClipboardContent {
-    format: ContentFormat,
-    data: Option<Vec<u8>>,
-    // maybe there is multiple data like files
-    multi_data: Option<Vec<ClipboardContent>>,
-}
-
-impl ClipboardContent {
-    pub fn new(format: ContentFormat) -> Self {
-        ClipboardContent {
-            format,
-            data: None,
-            multi_data: None,
-        }
-    }
-
-    pub fn new_with_data(format: ContentFormat, data: Vec<u8>) -> Self {
-        ClipboardContent {
-            format,
-            data: Some(data),
-            multi_data: None,
-        }
-    }
-
-    pub fn new_with_multi_data(format: ContentFormat, data: Vec<ClipboardContent>) -> Self {
-        ClipboardContent {
-            format,
-            data: None,
-            multi_data: Some(data),
-        }
-    }
-
-    pub fn is_multi(&self) -> bool {
-        self.multi_data.is_some()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.data.is_none()
-    }
-
-    pub fn put_data(&mut self, data: Vec<u8>) {
-        self.data = Some(data);
-    }
-
-    pub fn put_multi_data(&mut self, data: ClipboardContent) {
-        match &mut self.multi_data {
-            Some(multi) => multi.push(data),
-            None => {
-                let multi = vec![data];
-                self.multi_data = Some(multi);
-            }
-        }
-    }
+pub enum ClipboardContent {
+    Text(String),
+    Rtf(String),
+    Html(String),
+    Image(RustImageData),
+    Files(Vec<String>),
+    Other(String, Vec<u8>),
 }
 
 impl ContentData for ClipboardContent {
-    fn get_format(&self) -> &ContentFormat {
-        &self.format
+    fn get_format(&self) -> ContentFormat {
+        match self {
+            ClipboardContent::Text(_) => ContentFormat::Text,
+            ClipboardContent::Rtf(_) => ContentFormat::Rtf,
+            ClipboardContent::Html(_) => ContentFormat::Html,
+            ClipboardContent::Image(_) => ContentFormat::Image,
+            ClipboardContent::Files(_) => ContentFormat::Files,
+            ClipboardContent::Other(format, _) => ContentFormat::Other(format.clone()),
+        }
     }
 
     fn as_bytes(&self) -> &[u8] {
-        match &self.data {
-            Some(data) => data.as_slice(),
-            None => &[],
+        match self {
+            ClipboardContent::Text(data) => data.as_bytes(),
+            ClipboardContent::Rtf(data) => data.as_bytes(),
+            ClipboardContent::Html(data) => data.as_bytes(),
+            ClipboardContent::Image(data) => data.as_bytes(),
+            ClipboardContent::Files(data) => {
+                // use first file path as data
+                if let Some(path) = data.first() {
+                    path.as_bytes()
+                } else {
+                    &[]
+                }
+            }
+            ClipboardContent::Other(_, data) => data.as_slice(),
         }
     }
 
     fn as_str(&self) -> Result<&str> {
-        if let Some(data) = &self.data {
-            return match self.format {
-                ContentFormat::Image => Err("can't convert image to string".into()),
-                ContentFormat::Other(_) => std::str::from_utf8(data).map_err(|e| e.into()),
-                _ => std::str::from_utf8(data).map_err(|e| e.into()),
-            };
-        }
-        Err("content is empty".into())
-    }
-
-    fn as_image(&self) -> Result<RustImageData> {
-        if let ContentFormat::Image = self.format {
-            if let Some(data) = &self.data {
-                return RustImageData::from_bytes(data);
+        match self {
+            ClipboardContent::Text(data) => Ok(data),
+            ClipboardContent::Rtf(data) => Ok(data),
+            ClipboardContent::Html(data) => Ok(data),
+            ClipboardContent::Image(_) => Err("can't convert image to string".into()),
+            ClipboardContent::Files(data) => {
+                // use first file path as data
+                if let Some(path) = data.first() {
+                    Ok(path)
+                } else {
+                    Err("content is empty".into())
+                }
             }
-            Err("image data is empty".into())
-        } else {
-            Err("content is not image".into())
-        }
-    }
-
-    fn as_array(&self) -> &[ClipboardContent] {
-        match &self.multi_data {
-            Some(data) => data.as_slice(),
-            None => &[],
+            ClipboardContent::Other(_, data) => std::str::from_utf8(data).map_err(|e| e.into()),
         }
     }
 }
@@ -132,6 +89,15 @@ pub struct RustImageData {
 
 /// 此处的 RustImageBuffer 已经是带有图片格式的字节流，例如 png,jpeg;
 pub struct RustImageBuffer(Vec<u8>);
+
+impl RustImageData {
+    pub fn as_bytes(&self) -> &[u8] {
+        match &self.data {
+            Some(image) => image.as_bytes(),
+            None => &[],
+        }
+    }
+}
 
 pub trait RustImage: Sized {
     /// create an empty image

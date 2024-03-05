@@ -6,22 +6,9 @@ fn main() {
     let ctx = ClipboardContext::new().unwrap();
 
     let contents: Vec<ClipboardContent> = vec![
-        ClipboardContent::new_with_data(
-            ContentFormat::Text,
-            "hell@$#%^&U都98好的😊o Rust!!!".as_bytes().to_vec(),
-        ),
-        ClipboardContent::new_with_data(
-            ContentFormat::Rtf,
-            "\x1b[1m\x1b[4m\x1b[31mHello, Rust!\x1b[0m"
-                .as_bytes()
-                .to_vec(),
-        ),
-        ClipboardContent::new_with_data(
-            ContentFormat::Html,
-            "<html><body><h1>Hello, Rust!</h1></body></html>"
-                .as_bytes()
-                .to_vec(),
-        ),
+        ClipboardContent::Text("hell@$#%^&U都98好的😊o Rust!!!".to_string()),
+        ClipboardContent::Rtf("\x1b[1m\x1b[4m\x1b[31mHello, Rust!\x1b[0m".to_string()),
+        ClipboardContent::Html("<html><body><h1>Hello, Rust!</h1></body></html>".to_string()),
     ];
 
     ctx.set(contents).unwrap();

@@ -25,9 +25,9 @@ fn test_string() {
     assert_eq!(ctx.get_html().unwrap(), test_html);
 
     let contents: Vec<ClipboardContent> = vec![
-        ClipboardContent::new_with_data(ContentFormat::Text, test_plain_txt.as_bytes().to_vec()),
-        ClipboardContent::new_with_data(ContentFormat::Rtf, test_rich_txt.as_bytes().to_vec()),
-        ClipboardContent::new_with_data(ContentFormat::Html, test_html.as_bytes().to_vec()),
+        ClipboardContent::Text(test_plain_txt.to_string()),
+        ClipboardContent::Rtf(test_rich_txt.to_string()),
+        ClipboardContent::Html(test_html.to_string()),
     ];
     ctx.set(contents).unwrap();
     assert!(ctx.has(ContentFormat::Text));

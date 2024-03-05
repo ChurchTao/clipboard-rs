@@ -1,6 +1,6 @@
 use crate::{
     common::{Result, RustImage},
-    ContentFormat, RustImageData,
+    ClipboardContent, ContentFormat, RustImageData,
 };
 use crate::{CallBack, Clipboard, ClipboardWatcher};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -52,9 +52,12 @@ x11rb::atom_manager! {
         HTML: b"text/html",
         PNG_MIME: b"image/png",
         FILE_LIST: b"text/uri-list",
+        GNOME_COPY_FILES: b"x-special/gnome-copied-files",
+        NAUTILUS_FILE_LIST: b"x-special/nautilus-clipboard",
     }
 }
 
+const FILE_PATH_PREFIX: &str = "file://";
 pub struct ClipboardContext {
     inner: Arc<InnerContext>,
 }
@@ -460,8 +463,9 @@ impl Clipboard for ClipboardContext {
                 ContentFormat::Rtf => formats.contains(&atoms.RTF),
                 ContentFormat::Html => formats.contains(&atoms.HTML),
                 ContentFormat::Image => formats.contains(&atoms.PNG_MIME),
+                ContentFormat::Files => formats.contains(&atoms.FILE_LIST),
                 ContentFormat::Other(format_name) => {
-                    let atom = ctx.get_atom(format_name);
+                    let atom = ctx.get_atom(format_name.as_str());
                     match atom {
                         Ok(atom) => formats.contains(&atom),
                         Err(_) => false,
@@ -585,6 +589,112 @@ impl Clipboard for ClipboardContext {
             data: image_png.get_bytes().to_vec(),
         };
         self.write(vec![data])
+    }
+
+    fn get_files(&self) -> Result<Vec<String>> {
+        let atoms = self.inner.server.atoms;
+        let file_list_data = self.read(&atoms.FILE_LIST);
+        match file_list_data {
+            Ok(data) => {
+                let file_list_str = String::from_utf8_lossy(&data).to_string();
+                let mut list = Vec::new();
+                for line in file_list_str.lines() {
+                    if !line.starts_with(FILE_PATH_PREFIX) {
+                        continue;
+                    }
+                    list.push(line.to_string())
+                }
+                Ok(list)
+            }
+            Err(_) => Ok(vec![]),
+        }
+    }
+
+    fn get(&self, formats: &[ContentFormat]) -> Result<Vec<ClipboardContent>> {
+        let mut contents = Vec::new();
+        for format in formats {
+            match format {
+                ContentFormat::Text => match self.get_text() {
+                    Ok(text) => contents.push(ClipboardContent::Text(text)),
+                    Err(_) => continue,
+                },
+                ContentFormat::Rtf => match self.get_rich_text() {
+                    Ok(rtf) => contents.push(ClipboardContent::Rtf(rtf)),
+                    Err(_) => continue,
+                },
+                ContentFormat::Html => match self.get_html() {
+                    Ok(html) => contents.push(ClipboardContent::Html(html)),
+                    Err(_) => continue,
+                },
+                ContentFormat::Image => match self.get_image() {
+                    Ok(image) => contents.push(ClipboardContent::Image(image)),
+                    Err(_) => continue,
+                },
+                ContentFormat::Files => match self.get_files() {
+                    Ok(files) => contents.push(ClipboardContent::Files(files)),
+                    Err(_) => continue,
+                },
+                ContentFormat::Other(format_name) => match self.get_buffer(format_name) {
+                    Ok(buffer) => {
+                        contents.push(ClipboardContent::Other(format_name.clone(), buffer))
+                    }
+                    Err(_) => continue,
+                },
+            }
+        }
+        Ok(contents)
+    }
+
+    fn set_files(&self, files: Vec<String>) -> Result<()> {
+        let atoms = self.inner.server_for_write.atoms;
+        let data = file_uri_list_to_clipboard_data(files, atoms);
+        self.write(data)
+    }
+
+    fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
+        let mut data = Vec::new();
+        let atoms = self.inner.server_for_write.atoms;
+        for content in contents {
+            match content {
+                ClipboardContent::Text(text) => {
+                    data.push(ClipboardData {
+                        format: atoms.UTF8_STRING,
+                        data: text.as_bytes().to_vec(),
+                    });
+                }
+                ClipboardContent::Rtf(rtf) => {
+                    data.push(ClipboardData {
+                        format: atoms.RTF,
+                        data: rtf.as_bytes().to_vec(),
+                    });
+                }
+                ClipboardContent::Html(html) => {
+                    data.push(ClipboardData {
+                        format: atoms.HTML,
+                        data: html.as_bytes().to_vec(),
+                    });
+                }
+                ClipboardContent::Image(image) => {
+                    let image_png = image.to_png()?;
+                    data.push(ClipboardData {
+                        format: atoms.PNG_MIME,
+                        data: image_png.get_bytes().to_vec(),
+                    });
+                }
+                ClipboardContent::Files(files) => {
+                    let data_arr = file_uri_list_to_clipboard_data(files, atoms);
+                    data.extend(data_arr);
+                }
+                ClipboardContent::Other(format_name, buffer) => {
+                    let atom = self.inner.server_for_write.get_atom(&format_name)?;
+                    data.push(ClipboardData {
+                        format: atom,
+                        data: buffer,
+                    });
+                }
+            }
+        }
+        self.write(data)
     }
 }
 
@@ -722,4 +832,35 @@ impl XServerContext {
         let cookie = self.conn.get_atom_name(atom)?;
         Ok(String::from_utf8_lossy(&cookie.reply()?.name).to_string())
     }
+}
+
+fn file_uri_list_to_clipboard_data(file_list: Vec<String>, atoms: Atoms) -> Vec<ClipboardData> {
+    let uri_list: Vec<String> = file_list
+        .iter()
+        .map(|f| {
+            if f.starts_with(FILE_PATH_PREFIX) {
+                f.to_owned()
+            } else {
+                format!("{}{}", FILE_PATH_PREFIX, f)
+            }
+        })
+        .collect();
+    let uri_list = uri_list.join("\n");
+    let text_uri_list_data = uri_list.as_bytes().to_vec();
+    let gnome_copied_files_data = ["copy\n".as_bytes(), uri_list.as_bytes()].concat();
+
+    vec![
+        ClipboardData {
+            format: atoms.FILE_LIST,
+            data: text_uri_list_data,
+        },
+        ClipboardData {
+            format: atoms.GNOME_COPY_FILES,
+            data: gnome_copied_files_data.clone(),
+        },
+        ClipboardData {
+            format: atoms.NAUTILUS_FILE_LIST,
+            data: gnome_copied_files_data,
+        },
+    ]
 }

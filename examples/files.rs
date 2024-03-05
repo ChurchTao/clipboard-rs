@@ -4,12 +4,12 @@ fn main() {
     let ctx = ClipboardContext::new().unwrap();
 
     // change the file paths to your own
-    let files = vec![
-        "C:\\Users\\churcht\\test.png".to_string(),
-        "C:\\Users\\churcht\\test_resize.png".to_string(),
-    ];
+    // let files = vec![
+    //     "file:///home/parallels/clipboard-rs/Cargo.toml".to_string(),
+    //     "file:///home/parallels/clipboard-rs/CHANGELOG.md".to_string(),
+    // ];
 
-    ctx.set_files(files).unwrap();
+    // ctx.set_files(files).unwrap();
 
     let types = ctx.available_formats().unwrap();
     println!("{:?}", types);
