@@ -4,6 +4,15 @@ clipboard-rs is a cross-platform library written in Rust for getting and setting
 
 [简体中文](README_ZH.md)
 
+## Function Support
+
+- Plain text
+- Html
+- Rich text
+- Image (In `PNG` format)
+- File (In `file-uri-list` format)
+- Any type (by specifying the type identifier) can be obtained through the `available_formats` method
+
 ## Development Plan
 
 - [x] MacOS Support
@@ -16,7 +25,7 @@ Add the following content to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-clipboard-rs = "0.1.0"
+clipboard-rs = "0.1.1"
 ```
 
 ## Examples

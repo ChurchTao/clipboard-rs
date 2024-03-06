@@ -2,6 +2,15 @@
 
 clipboard-rs 是一个用 Rust 语言编写的跨平台库，用于获取和设置操作系统级别的剪贴板内容。它支持 Linux、Windows 和 MacOS。
 
+## 功能支持
+
+- 纯文本
+- Html
+- 富文本
+- 图片（以 `PNG` 格式）
+- 文件（以 `file-uri-list` 形式）
+- 任意类型（通过指定类型标识符）可以先通过 `available_formats` 方法获取支持的类型
+
 ## 开发计划
 
 - [x] MacOS 支持
@@ -14,7 +23,7 @@ clipboard-rs 是一个用 Rust 语言编写的跨平台库，用于获取和设�
 
 ```toml
 [dependencies]
-clipboard-rs = "0.1.0"
+clipboard-rs = "0.1.1"
 ```
 
 ## 示例
