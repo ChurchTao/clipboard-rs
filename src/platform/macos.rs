@@ -451,31 +451,20 @@ impl Clipboard for ClipboardContext {
 
 impl ClipboardContent {
     fn to_write_data(&self) -> Result<WriteToClipboardData> {
-        if self.is_empty() {
-            return Err("content is empty".into());
-        }
-        let format = self.get_format();
-        if self.is_multi() {
-            let data_vec = self
-                .as_array()
-                .iter()
-                .map(|c| unsafe {
-                    NSData::dataWithBytes_length_(
-                        nil,
-                        c.as_bytes().as_ptr() as *const c_void,
-                        c.as_bytes().len() as u64,
-                    )
-                })
-                .collect::<Vec<id>>();
-            let ns_array = unsafe { NSArray::arrayWithObjects(nil, data_vec.as_ref()) };
-            let write_data = WriteToClipboardData {
-                data: ns_array,
-                is_multi: true,
-                format: format.clone(),
-            };
-            Ok(write_data)
-        } else {
-            let write_data = WriteToClipboardData {
+        let write_data = match self {
+            ClipboardContent::Files(file_list) => {
+                let ns_string_arr = file_list
+                    .iter()
+                    .map(|f| unsafe { NSString::alloc(nil).init_str(f) })
+                    .collect::<Vec<id>>();
+                let ns_array = unsafe { NSArray::arrayWithObjects(nil, ns_string_arr.as_ref()) };
+                WriteToClipboardData {
+                    data: ns_array,
+                    is_multi: true,
+                    format: ContentFormat::Files,
+                }
+            }
+            _ => WriteToClipboardData {
                 data: unsafe {
                     NSData::dataWithBytes_length_(
                         nil,
@@ -484,10 +473,10 @@ impl ClipboardContent {
                     )
                 },
                 is_multi: false,
-                format: format.clone(),
-            };
-            Ok(write_data)
-        }
+                format: self.get_format(),
+            },
+        };
+        Ok(write_data)
     }
 }
 
@@ -496,33 +485,78 @@ fn convert_to_clipboard_content(
     format: &ContentFormat,
 ) -> ClipboardContent {
     unsafe {
-        let mut content = ClipboardContent::new(format.clone());
-        for ns_pastboard_item in ns_pastboard_item_arr {
-            let ns_type = {
-                match format {
-                    ContentFormat::Text => NSPasteboardTypeString,
-                    ContentFormat::Rtf => NSPasteboardTypeRTF,
-                    ContentFormat::Html => NSPasteboardTypeHTML,
-                    ContentFormat::Image => NSPasteboardTypePNG,
-                    ContentFormat::Files => NSString::alloc(nil).init_str(NS_FILES),
-                    ContentFormat::Other(other_format) => {
-                        NSString::alloc(nil).init_str(other_format.as_str())
-                    }
+        let ns_type = {
+            match format {
+                ContentFormat::Text => NSPasteboardTypeString,
+                ContentFormat::Rtf => NSPasteboardTypeRTF,
+                ContentFormat::Html => NSPasteboardTypeHTML,
+                ContentFormat::Image => NSPasteboardTypePNG,
+                ContentFormat::Files => NSString::alloc(nil).init_str(NS_FILES),
+                ContentFormat::Other(other_format) => {
+                    NSString::alloc(nil).init_str(other_format.as_str())
                 }
-            };
-            let ns_data = ns_pastboard_item.dataForType(ns_type);
-            if ns_data.length() == 0 {
-                continue;
             }
-            let length: usize = ns_data.length() as usize;
-            let bytes = slice::from_raw_parts(ns_data.bytes() as *const u8, length);
-            if !content.is_empty() {
-                let mut child = ClipboardContent::new(format.clone());
-                child.put_data(bytes.to_vec());
-                content.put_multi_data(child);
+        };
+        let content: ClipboardContent = match format {
+            ContentFormat::Text | ContentFormat::Rtf | ContentFormat::Html => {
+                let mut string_vec = Vec::new();
+                for ns_pastboard_item in ns_pastboard_item_arr {
+                    let ns_string: id = ns_pastboard_item.stringForType(ns_type);
+                    if ns_string.len() == 0 {
+                        continue;
+                    }
+                    let bytes = ns_string.UTF8String();
+                    let c_str = CStr::from_ptr(bytes);
+                    let str_slice = c_str.to_str().unwrap();
+                    string_vec.push(str_slice);
+                }
+                match format {
+                    ContentFormat::Text => ClipboardContent::Text(string_vec.join("\n")),
+                    ContentFormat::Rtf => ClipboardContent::Rtf(string_vec.join("\n")),
+                    ContentFormat::Html => ClipboardContent::Html(string_vec.join("\n")),
+                    _ => panic!("unexpected format"),
+                }
             }
-            content.put_data(bytes.to_vec());
-        }
+            ContentFormat::Image => match ns_pastboard_item_arr.first() {
+                Some(ns_pastboard_item) => {
+                    let ns_data = ns_pastboard_item.dataForType(ns_type);
+                    if ns_data.length() == 0 {
+                        return ClipboardContent::Image(RustImageData::empty());
+                    }
+                    let length: usize = ns_data.length() as usize;
+                    let bytes = slice::from_raw_parts(ns_data.bytes() as *const u8, length);
+                    let image = RustImageData::from_bytes(bytes).unwrap();
+                    ClipboardContent::Image(image)
+                }
+                None => ClipboardContent::Image(RustImageData::empty()),
+            },
+            ContentFormat::Files => {
+                let mut string_vec = Vec::new();
+                for ns_pastboard_item in ns_pastboard_item_arr {
+                    let ns_string: id = ns_pastboard_item.stringForType(ns_type);
+                    if ns_string.len() == 0 {
+                        continue;
+                    }
+                    let bytes = ns_string.UTF8String();
+                    let c_str = CStr::from_ptr(bytes);
+                    let str_slice = c_str.to_str().unwrap();
+                    string_vec.push(str_slice.to_owned());
+                }
+                ClipboardContent::Files(string_vec)
+            }
+            ContentFormat::Other(format) => match ns_pastboard_item_arr.first() {
+                Some(ns_pastboard_item) => {
+                    let ns_data = ns_pastboard_item.dataForType(ns_type);
+                    if ns_data.length() == 0 {
+                        return ClipboardContent::Other(format.clone(), Vec::new());
+                    }
+                    let length: usize = ns_data.length() as usize;
+                    let bytes = slice::from_raw_parts(ns_data.bytes() as *const u8, length);
+                    ClipboardContent::Other(format.to_string(), bytes.to_vec())
+                }
+                None => ClipboardContent::Other(format.clone(), Vec::new()),
+            },
+        };
         content
     }
 }
