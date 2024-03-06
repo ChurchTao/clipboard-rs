@@ -5,8 +5,7 @@ use crate::{Clipboard, ClipboardContent, ClipboardWatcher, ContentFormat};
 use clipboard_win::raw::set_without_clear;
 use clipboard_win::types::c_uint;
 use clipboard_win::{
-    formats, get, get_clipboard, raw, set_clipboard, Clipboard as ClipboardWin, Getter, Setter,
-    SysResult,
+    formats, get, get_clipboard, raw, set_clipboard, Clipboard as ClipboardWin, Setter, SysResult,
 };
 use image::EncodableLayout;
 use windows_win::sys::{
@@ -288,24 +287,53 @@ impl Clipboard for ClipboardContext {
         for format in formats {
             match format {
                 ContentFormat::Text => {
-                    let mut data = Vec::new();
-                    let r = formats::Unicode.read_clipboard(&mut data);
+                    let r = get(formats::Unicode);
                     match r {
-                        Ok(_) => {
-                            res.push(ClipboardContent::new_with_data(format.clone(), data));
+                        Ok(txt) => {
+                            res.push(ClipboardContent::Text(txt));
                         }
                         Err(_) => continue,
                     }
                 }
-                ContentFormat::Rtf
-                | ContentFormat::Html
-                | ContentFormat::Image
-                | ContentFormat::Other(_) => {
+                ContentFormat::Rtf => {
                     let format_uint = self.get_format(format);
                     let buffer = get(formats::RawData(format_uint));
                     match buffer {
                         Ok(buffer) => {
-                            res.push(ClipboardContent::new_with_data(format.clone(), buffer));
+                            let rtf = String::from_utf8(buffer)?;
+                            res.push(ClipboardContent::Rtf(rtf));
+                        }
+                        Err(_) => continue,
+                    }
+                }
+                ContentFormat::Html => {
+                    let format_uint = self.get_format(format);
+                    let buffer = get(formats::RawData(format_uint));
+                    match buffer {
+                        Ok(buffer) => {
+                            let html = cf_html_to_plain_html(buffer)?;
+                            res.push(ClipboardContent::Html(html));
+                        }
+                        Err(_) => continue,
+                    }
+                }
+                ContentFormat::Image => {
+                    let format_uint = self.get_format(format);
+                    let buffer = get(formats::RawData(format_uint));
+                    match buffer {
+                        Ok(buffer) => {
+                            let image = RustImage::from_bytes(&buffer)?;
+                            res.push(ClipboardContent::Image(image));
+                        }
+                        Err(_) => continue,
+                    }
+                }
+                ContentFormat::Other(fmt) => {
+                    let format_uint = self.get_format(format);
+                    let buffer = get(formats::RawData(format_uint));
+                    match buffer {
+                        Ok(buffer) => {
+                            res.push(ClipboardContent::Other(fmt.clone(), buffer));
                         }
                         Err(_) => continue,
                     }
@@ -314,22 +342,7 @@ impl Clipboard for ClipboardContext {
                     let files = self.get_files();
                     match files {
                         Ok(files) => {
-                            if files.is_empty() {
-                                continue;
-                            }
-                            let mut clipboard_multi_res = ClipboardContent::new(format.clone());
-                            files.iter().for_each(|file_path_string| {
-                                let file_path_buffer = file_path_string.as_bytes().to_vec();
-                                if clipboard_multi_res.is_empty() {
-                                    clipboard_multi_res.put_data(file_path_buffer.clone());
-                                }
-                                let data = ClipboardContent::new_with_data(
-                                    format.clone(),
-                                    file_path_buffer,
-                                );
-                                clipboard_multi_res.put_multi_data(data);
-                            });
-                            res.push(clipboard_multi_res);
+                            res.push(ClipboardContent::Files(files));
                         }
                         Err(_) => continue,
                     }
@@ -351,32 +364,27 @@ impl Clipboard for ClipboardContext {
     fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
         let _clip = ClipboardWin::new_attempts(10).expect("Open clipboard");
         for content in contents {
-            match content.get_format() {
-                ContentFormat::Text => {
+            match content {
+                ClipboardContent::Text(txt) => {
                     let format_uint = formats::CF_UNICODETEXT;
-                    let u16_str = utf8_to_utf16(content.as_str().unwrap());
+                    let u16_str = utf8_to_utf16(txt.as_str());
                     let res = set_without_clear(format_uint, u16_str.as_bytes());
                     if res.is_err() {
                         continue;
                     }
                 }
-                ContentFormat::Rtf
-                | ContentFormat::Html
-                | ContentFormat::Image
-                | ContentFormat::Other(_) => {
-                    let format_uint = self.get_format(content.get_format());
+                ClipboardContent::Rtf(_)
+                | ClipboardContent::Html(_)
+                | ClipboardContent::Image(_)
+                | ClipboardContent::Other(_, _) => {
+                    let format_uint = self.get_format(&content.get_format());
                     let res = set_without_clear(format_uint, content.as_bytes());
                     if res.is_err() {
                         continue;
                     }
                 }
-                ContentFormat::Files => {
-                    let file_path_arr = content
-                        .as_array()
-                        .iter()
-                        .map(|c| c.as_str().unwrap())
-                        .collect::<Vec<&str>>();
-                    let res = formats::FileList.write_clipboard(&file_path_arr);
+                ClipboardContent::Files(file_list) => {
+                    let res = formats::FileList.write_clipboard(&file_list);
                     if res.is_err() {
                         continue;
                     }
