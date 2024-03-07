@@ -13,7 +13,19 @@ on:
       - "README.md"
 
 jobs:
+  rustfmt:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
+      - uses: actions/checkout@v4
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
   clippy:
+    needs: rustfmt
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
