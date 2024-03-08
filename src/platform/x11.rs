@@ -145,13 +145,13 @@ impl InnerContext {
 				Err(_) => return Err("Failed to read clipboard data".into()),
 			}
 		}
-		// on failure we notify the requester of it
+		// on failure, we notify the requester of it
 		let property = if success {
 			event.property
 		} else {
 			AtomEnum::NONE.into()
 		};
-		// tell the requestor that we finished sending data
+		// tell the requester that we finished sending data
 		ctx.conn.send_event(
 			false,
 			event.requestor,
@@ -424,14 +424,7 @@ impl Clipboard for ClipboardContext {
 		self.read(&atoms.TARGETS).map(|data| {
 			let mut formats = Vec::new();
 			// 解析原子标识符列表
-			let atom_list: Vec<Atom> = data
-				.chunks(4)
-				.map(|chunk| {
-					let mut bytes = [0u8; 4];
-					bytes.copy_from_slice(chunk);
-					u32::from_ne_bytes(bytes)
-				})
-				.collect();
+			let atom_list: Vec<Atom> = parse_atom_list(&data);
 			for atom in atom_list {
 				if self.inner.ignore_formats.contains(&atom) {
 					continue;
@@ -446,17 +439,7 @@ impl Clipboard for ClipboardContext {
 	fn has(&self, format: crate::ContentFormat) -> bool {
 		let ctx = &self.inner.server;
 		let atoms = ctx.atoms;
-		let atom_list = self.read(&atoms.TARGETS).map(|data| {
-			let atom_list: Vec<Atom> = data
-				.chunks(4)
-				.map(|chunk| {
-					let mut bytes = [0u8; 4];
-					bytes.copy_from_slice(chunk);
-					u32::from_ne_bytes(bytes)
-				})
-				.collect();
-			atom_list
-		});
+		let atom_list = self.read(&atoms.TARGETS).map(|data| parse_atom_list(&data));
 		match atom_list {
 			Ok(formats) => match format {
 				ContentFormat::Text => formats.contains(&atoms.UTF8_STRING),
@@ -491,37 +474,28 @@ impl Clipboard for ClipboardContext {
 	fn get_text(&self) -> Result<String> {
 		let atoms = self.inner.server.atoms;
 		let text_data = self.read(&atoms.UTF8_STRING);
-		match text_data {
-			Ok(data) => {
-				let text = String::from_utf8_lossy(&data).to_string();
-				Ok(text)
-			}
-			Err(_) => Ok("".to_string()),
-		}
+		text_data.map_or_else(
+			|_| Ok("".to_string()),
+			|data| Ok(String::from_utf8_lossy(&data).to_string()),
+		)
 	}
 
 	fn get_rich_text(&self) -> Result<String> {
 		let atoms = self.inner.server.atoms;
 		let rtf_data = self.read(&atoms.RTF);
-		match rtf_data {
-			Ok(data) => {
-				let rtf = String::from_utf8_lossy(&data).to_string();
-				Ok(rtf)
-			}
-			Err(_) => Ok("".to_string()),
-		}
+		rtf_data.map_or_else(
+			|_| Ok("".to_string()),
+			|data| Ok(String::from_utf8_lossy(&data).to_string()),
+		)
 	}
 
 	fn get_html(&self) -> Result<String> {
 		let atoms = self.inner.server.atoms;
 		let html_data = self.read(&atoms.HTML);
-		match html_data {
-			Ok(data) => {
-				let html = String::from_utf8_lossy(&data).to_string();
-				Ok(html)
-			}
-			Err(_) => Ok("".to_string()),
-		}
+		html_data.map_or_else(
+			|_| Ok("".to_string()),
+			|data| Ok(String::from_utf8_lossy(&data).to_string()),
+		)
 	}
 
 	fn get_image(&self) -> Result<crate::RustImageData> {
@@ -537,6 +511,60 @@ impl Clipboard for ClipboardContext {
 			}
 			Err(_) => Err("No image data found".into()),
 		}
+	}
+
+	fn get_files(&self) -> Result<Vec<String>> {
+		let atoms = self.inner.server.atoms;
+		let file_list_data = self.read(&atoms.FILE_LIST);
+		file_list_data.map_or_else(
+			|_| Ok(vec![]),
+			|data| {
+				let file_list_str = String::from_utf8_lossy(&data).to_string();
+				let mut list = Vec::new();
+				for line in file_list_str.lines() {
+					if !line.starts_with(FILE_PATH_PREFIX) {
+						continue;
+					}
+					list.push(line.to_string())
+				}
+				Ok(list)
+			},
+		)
+	}
+
+	fn get(&self, formats: &[ContentFormat]) -> Result<Vec<ClipboardContent>> {
+		let mut contents = Vec::new();
+		for format in formats {
+			match format {
+				ContentFormat::Text => match self.get_text() {
+					Ok(text) => contents.push(ClipboardContent::Text(text)),
+					Err(_) => continue,
+				},
+				ContentFormat::Rtf => match self.get_rich_text() {
+					Ok(rtf) => contents.push(ClipboardContent::Rtf(rtf)),
+					Err(_) => continue,
+				},
+				ContentFormat::Html => match self.get_html() {
+					Ok(html) => contents.push(ClipboardContent::Html(html)),
+					Err(_) => continue,
+				},
+				ContentFormat::Image => match self.get_image() {
+					Ok(image) => contents.push(ClipboardContent::Image(image)),
+					Err(_) => continue,
+				},
+				ContentFormat::Files => match self.get_files() {
+					Ok(files) => contents.push(ClipboardContent::Files(files)),
+					Err(_) => continue,
+				},
+				ContentFormat::Other(format_name) => match self.get_buffer(format_name) {
+					Ok(buffer) => {
+						contents.push(ClipboardContent::Other(format_name.clone(), buffer))
+					}
+					Err(_) => continue,
+				},
+			}
+		}
+		Ok(contents)
 	}
 
 	fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
@@ -581,7 +609,7 @@ impl Clipboard for ClipboardContext {
 		self.write(vec![data])
 	}
 
-	fn set_image(&self, image: crate::RustImageData) -> Result<()> {
+	fn set_image(&self, image: RustImageData) -> Result<()> {
 		let atoms = self.inner.server_for_write.atoms;
 		let image_png = image.to_png()?;
 		let data = ClipboardData {
@@ -589,60 +617,6 @@ impl Clipboard for ClipboardContext {
 			data: image_png.get_bytes().to_vec(),
 		};
 		self.write(vec![data])
-	}
-
-	fn get_files(&self) -> Result<Vec<String>> {
-		let atoms = self.inner.server.atoms;
-		let file_list_data = self.read(&atoms.FILE_LIST);
-		match file_list_data {
-			Ok(data) => {
-				let file_list_str = String::from_utf8_lossy(&data).to_string();
-				let mut list = Vec::new();
-				for line in file_list_str.lines() {
-					if !line.starts_with(FILE_PATH_PREFIX) {
-						continue;
-					}
-					list.push(line.to_string())
-				}
-				Ok(list)
-			}
-			Err(_) => Ok(vec![]),
-		}
-	}
-
-	fn get(&self, formats: &[ContentFormat]) -> Result<Vec<ClipboardContent>> {
-		let mut contents = Vec::new();
-		for format in formats {
-			match format {
-				ContentFormat::Text => match self.get_text() {
-					Ok(text) => contents.push(ClipboardContent::Text(text)),
-					Err(_) => continue,
-				},
-				ContentFormat::Rtf => match self.get_rich_text() {
-					Ok(rtf) => contents.push(ClipboardContent::Rtf(rtf)),
-					Err(_) => continue,
-				},
-				ContentFormat::Html => match self.get_html() {
-					Ok(html) => contents.push(ClipboardContent::Html(html)),
-					Err(_) => continue,
-				},
-				ContentFormat::Image => match self.get_image() {
-					Ok(image) => contents.push(ClipboardContent::Image(image)),
-					Err(_) => continue,
-				},
-				ContentFormat::Files => match self.get_files() {
-					Ok(files) => contents.push(ClipboardContent::Files(files)),
-					Err(_) => continue,
-				},
-				ContentFormat::Other(format_name) => match self.get_buffer(format_name) {
-					Ok(buffer) => {
-						contents.push(ClipboardContent::Other(format_name.clone(), buffer))
-					}
-					Err(_) => continue,
-				},
-			}
-		}
-		Ok(contents)
 	}
 
 	fn set_files(&self, files: Vec<String>) -> Result<()> {
@@ -832,6 +806,17 @@ impl XServerContext {
 		let cookie = self.conn.get_atom_name(atom)?;
 		Ok(String::from_utf8_lossy(&cookie.reply()?.name).to_string())
 	}
+}
+
+// 解析原子标识符列表
+fn parse_atom_list(data: &[u8]) -> Vec<Atom> {
+	data.chunks(4)
+		.map(|chunk| {
+			let mut bytes = [0u8; 4];
+			bytes.copy_from_slice(chunk);
+			u32::from_ne_bytes(bytes)
+		})
+		.collect()
 }
 
 fn file_uri_list_to_clipboard_data(file_list: Vec<String>, atoms: Atoms) -> Vec<ClipboardData> {
