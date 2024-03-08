@@ -87,6 +87,19 @@ pub struct RustImageData {
 	data: Option<DynamicImage>,
 }
 
+macro_rules! handle_image_operation {
+	($self:expr, $operation:expr) => {
+		match &$self.data {
+			Some(image) => {
+				let mut buf = Cursor::new(Vec::new());
+				image.write_to(&mut buf, $operation)?;
+				Ok(RustImageBuffer(buf.into_inner()))
+			}
+			None => Err("image is empty".into()),
+		}
+	};
+}
+
 /// 此处的 RustImageBuffer 已经是带有图片格式的字节流，例如 png,jpeg;
 pub struct RustImageBuffer(Vec<u8>);
 
@@ -193,33 +206,11 @@ impl RustImage for RustImageData {
 		}
 	}
 
-	fn to_jpeg(&self, quality: u8) -> Result<RustImageBuffer> {
-		match &self.data {
-			Some(image) => {
-				let mut buf = Cursor::new(Vec::new());
-				image.write_to(&mut buf, image::ImageOutputFormat::Jpeg(quality))?;
-				Ok(RustImageBuffer(buf.into_inner()))
-			}
-			None => Err("image is empty".into()),
-		}
-	}
-
 	fn save_to_path(&self, path: &str) -> Result<()> {
 		match &self.data {
 			Some(image) => {
 				image.save(path)?;
 				Ok(())
-			}
-			None => Err("image is empty".into()),
-		}
-	}
-
-	fn to_png(&self) -> Result<RustImageBuffer> {
-		match &self.data {
-			Some(image) => {
-				let mut buf = Cursor::new(Vec::new());
-				image.write_to(&mut buf, image::ImageOutputFormat::Png)?;
-				Ok(RustImageBuffer(buf.into_inner()))
 			}
 			None => Err("image is empty".into()),
 		}
@@ -239,15 +230,16 @@ impl RustImage for RustImageData {
 		}
 	}
 
+	fn to_jpeg(&self, quality: u8) -> Result<RustImageBuffer> {
+		handle_image_operation!(self, image::ImageOutputFormat::Jpeg(quality))
+	}
+
+	fn to_png(&self) -> Result<RustImageBuffer> {
+		handle_image_operation!(self, image::ImageOutputFormat::Png)
+	}
+
 	fn to_bitmap(&self) -> Result<RustImageBuffer> {
-		match &self.data {
-			Some(image) => {
-				let mut buf = Cursor::new(Vec::new());
-				image.write_to(&mut buf, image::ImageOutputFormat::Bmp)?;
-				Ok(RustImageBuffer(buf.into_inner()))
-			}
-			None => Err("image is empty".into()),
-		}
+		handle_image_operation!(self, image::ImageOutputFormat::Bmp)
 	}
 }
 

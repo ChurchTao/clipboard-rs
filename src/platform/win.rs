@@ -14,7 +14,7 @@ use windows_win::sys::{
 };
 use windows_win::{Messages, Window};
 
-static UNKNOW_FORMAT: &str = "unknow format";
+static UNKNOWN_FORMAT: &str = "unknown format";
 static CF_RTF: &str = "Rich Text Format";
 static CF_HTML: &str = "HTML Format";
 static CF_PNG: &str = "PNG";
@@ -132,11 +132,38 @@ impl Clipboard for ClipboardContext {
 			match f_name {
 				Some(name) => res.push(name),
 				None => {
-					res.push(UNKNOW_FORMAT.to_string());
+					res.push(UNKNOWN_FORMAT.to_string());
 				}
 			}
 		});
 		Ok(res)
+	}
+
+	fn has(&self, format: ContentFormat) -> bool {
+		match format {
+			ContentFormat::Text => clipboard_win::is_format_avail(formats::CF_UNICODETEXT),
+			ContentFormat::Rtf => {
+				let cf_rtf_uint = self.format_map.get(CF_RTF).unwrap();
+				clipboard_win::is_format_avail(*cf_rtf_uint)
+			}
+			ContentFormat::Html => {
+				let cf_html_uint = self.format_map.get(CF_HTML).unwrap();
+				clipboard_win::is_format_avail(*cf_html_uint)
+			}
+			ContentFormat::Image => {
+				// Currently only judge whether there is a png format
+				let cf_png_uint = self.format_map.get(CF_PNG).unwrap();
+				clipboard_win::is_format_avail(*cf_png_uint)
+			}
+			ContentFormat::Files => clipboard_win::is_format_avail(formats::CF_HDROP),
+			ContentFormat::Other(format) => {
+				let format_uint = clipboard_win::register_format(format.as_str());
+				if let Some(format_uint) = format_uint {
+					return clipboard_win::is_format_avail(format_uint.get());
+				}
+				false
+			}
+		}
 	}
 
 	fn clear(&self) -> Result<()> {
@@ -196,80 +223,6 @@ impl Clipboard for ClipboardContext {
 		match image_raw_data {
 			Ok(data) => RustImageData::from_bytes(&data),
 			Err(_) => Ok(RustImageData::empty()),
-		}
-	}
-
-	fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
-		let format_uint = clipboard_win::register_format(format);
-		if format_uint.is_none() {
-			return Err("register format error".into());
-		}
-		let format_uint = format_uint.unwrap().get();
-		let res = set_clipboard(formats::RawData(format_uint), buffer);
-		if res.is_err() {
-			return Err("set buffer error".into());
-		}
-		Ok(())
-	}
-
-	fn set_text(&self, text: String) -> Result<()> {
-		let res = set_clipboard(formats::Unicode, text);
-		if res.is_err() {
-			return Err("set text error".into());
-		}
-		Ok(())
-	}
-
-	fn set_rich_text(&self, text: String) -> Result<()> {
-		let res = self.set_buffer(CF_RTF, text.as_bytes().to_vec());
-		if res.is_err() {
-			return Err("set rich text error".into());
-		}
-		Ok(())
-	}
-
-	fn set_html(&self, html: String) -> Result<()> {
-		let cf_html = plain_html_to_cf_html(&html);
-		let res = self.set_buffer(CF_HTML, cf_html.as_bytes().to_vec());
-		if res.is_err() {
-			return Err("set html error".into());
-		}
-		Ok(())
-	}
-
-	fn set_image(&self, image: RustImageData) -> Result<()> {
-		let png = image.to_png()?;
-		let res = self.set_buffer(CF_PNG, png.get_bytes().to_vec());
-		if res.is_err() {
-			return Err("set image error".into());
-		}
-		Ok(())
-	}
-
-	fn has(&self, format: ContentFormat) -> bool {
-		match format {
-			ContentFormat::Text => clipboard_win::is_format_avail(formats::CF_UNICODETEXT),
-			ContentFormat::Rtf => {
-				let cf_rtf_uint = self.format_map.get(CF_RTF).unwrap();
-				clipboard_win::is_format_avail(*cf_rtf_uint)
-			}
-			ContentFormat::Html => {
-				let cf_html_uint = self.format_map.get(CF_HTML).unwrap();
-				clipboard_win::is_format_avail(*cf_html_uint)
-			}
-			ContentFormat::Image => {
-				// Currently only judge whether there is a png format
-				let cf_png_uint = self.format_map.get(CF_PNG).unwrap();
-				clipboard_win::is_format_avail(*cf_png_uint)
-			}
-			ContentFormat::Files => clipboard_win::is_format_avail(formats::CF_HDROP),
-			ContentFormat::Other(format) => {
-				let format_uint = clipboard_win::register_format(format.as_str());
-				if let Some(format_uint) = format_uint {
-					return clipboard_win::is_format_avail(format_uint.get());
-				}
-				false
-			}
 		}
 	}
 
@@ -350,6 +303,53 @@ impl Clipboard for ClipboardContext {
 			}
 		}
 		Ok(res)
+	}
+
+	fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
+		let format_uint = clipboard_win::register_format(format);
+		if format_uint.is_none() {
+			return Err("register format error".into());
+		}
+		let format_uint = format_uint.unwrap().get();
+		let res = set_clipboard(formats::RawData(format_uint), buffer);
+		if res.is_err() {
+			return Err("set buffer error".into());
+		}
+		Ok(())
+	}
+
+	fn set_text(&self, text: String) -> Result<()> {
+		let res = set_clipboard(formats::Unicode, text);
+		if res.is_err() {
+			return Err("set text error".into());
+		}
+		Ok(())
+	}
+
+	fn set_rich_text(&self, text: String) -> Result<()> {
+		let res = self.set_buffer(CF_RTF, text.as_bytes().to_vec());
+		if res.is_err() {
+			return Err("set rich text error".into());
+		}
+		Ok(())
+	}
+
+	fn set_html(&self, html: String) -> Result<()> {
+		let cf_html = plain_html_to_cf_html(&html);
+		let res = self.set_buffer(CF_HTML, cf_html.as_bytes().to_vec());
+		if res.is_err() {
+			return Err("set html error".into());
+		}
+		Ok(())
+	}
+
+	fn set_image(&self, image: RustImageData) -> Result<()> {
+		let png = image.to_png()?;
+		let res = self.set_buffer(CF_PNG, png.get_bytes().to_vec());
+		if res.is_err() {
+			return Err("set image error".into());
+		}
+		Ok(())
 	}
 
 	fn set_files(&self, files: Vec<String>) -> Result<()> {
