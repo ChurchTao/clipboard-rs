@@ -1,5 +1,5 @@
-use crate::common::{CallBack, ContentData, Result, RustImage, RustImageData};
-use crate::{Clipboard, ClipboardContent, ClipboardWatcher, ContentFormat};
+use crate::common::{ContentData, Result, RustImage, RustImageData};
+use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
 use cocoa::appkit::{
 	NSFilenamesPboardType, NSPasteboard, NSPasteboardTypeHTML, NSPasteboardTypePNG,
 	NSPasteboardTypeRTF, NSPasteboardTypeString,
@@ -17,18 +17,18 @@ pub struct ClipboardContext {
 	clipboard: id,
 }
 
-pub struct ClipboardWatcherContext {
+pub struct ClipboardWatcherContext<T: ClipboardHandler> {
 	clipboard: id,
-	handlers: Vec<CallBack>,
+	handlers: Vec<T>,
 	stop_signal: Sender<()>,
 	stop_receiver: Receiver<()>,
 	running: bool,
 }
 
-unsafe impl Send for ClipboardWatcherContext {}
+unsafe impl<T: ClipboardHandler> Send for ClipboardWatcherContext<T> {}
 
-impl ClipboardWatcherContext {
-	pub fn new() -> Result<ClipboardWatcherContext> {
+impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
+	pub fn new() -> Result<Self> {
 		let ns_pasteboard = unsafe { NSPasteboard::generalPasteboard(nil) };
 		let (tx, rx) = mpsc::channel();
 		Ok(ClipboardWatcherContext {
@@ -41,15 +41,19 @@ impl ClipboardWatcherContext {
 	}
 }
 
-impl ClipboardWatcher for ClipboardWatcherContext {
-	fn add_handler(&mut self, f: CallBack) -> &mut Self {
-		self.handlers.push(f);
+impl<T: ClipboardHandler> ClipboardWatcher<T> for ClipboardWatcherContext<T> {
+	fn add_handler(&mut self, handler: T) -> &mut Self {
+		self.handlers.push(handler);
 		self
 	}
 
 	fn start_watch(&mut self) {
 		if self.running {
 			println!("already start watch!");
+			return;
+		}
+		if self.handlers.is_empty() {
+			println!("no handler, no need to start watch!");
 			return;
 		}
 		self.running = true;
@@ -67,9 +71,9 @@ impl ClipboardWatcher for ClipboardWatcherContext {
 			if last_change_count == 0 {
 				last_change_count = change_count;
 			} else if change_count != last_change_count {
-				self.handlers.iter().for_each(|handler| {
-					handler();
-				});
+				self.handlers
+					.iter_mut()
+					.for_each(|handler| handler.on_clipboard_change());
 				last_change_count = change_count;
 			}
 		}

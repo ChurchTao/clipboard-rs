@@ -3,7 +3,6 @@ use image::{self, DynamicImage, GenericImageView};
 use std::error::Error;
 use std::io::Cursor;
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
-pub type CallBack = Box<dyn Fn() + Send + Sync>;
 
 pub trait ContentData {
 	fn get_format(&self) -> ContentFormat;
@@ -11,6 +10,10 @@ pub trait ContentData {
 	fn as_bytes(&self) -> &[u8];
 
 	fn as_str(&self) -> Result<&str>;
+}
+
+pub trait ClipboardHandler {
+	fn on_clipboard_change(&mut self);
 }
 
 pub enum ClipboardContent {

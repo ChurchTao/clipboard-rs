@@ -1,8 +1,8 @@
 use crate::{
 	common::{Result, RustImage},
-	ClipboardContent, ContentFormat, RustImageData,
+	ClipboardContent, ClipboardHandler, ContentFormat, RustImageData,
 };
-use crate::{CallBack, Clipboard, ClipboardWatcher};
+use crate::{Clipboard, ClipboardWatcher};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::{
 	sync::{Arc, RwLock},
@@ -672,13 +672,13 @@ impl Clipboard for ClipboardContext {
 	}
 }
 
-pub struct ClipboardWatcherContext {
-	handlers: Vec<CallBack>,
+pub struct ClipboardWatcherContext<T: ClipboardHandler> {
+	handlers: Vec<T>,
 	stop_signal: Sender<()>,
 	stop_receiver: Receiver<()>,
 }
 
-impl ClipboardWatcherContext {
+impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 	pub fn new() -> Result<Self> {
 		let (tx, rx) = mpsc::channel();
 		Ok(Self {
@@ -689,8 +689,8 @@ impl ClipboardWatcherContext {
 	}
 }
 
-impl ClipboardWatcher for ClipboardWatcherContext {
-	fn add_handler(&mut self, f: crate::CallBack) -> &mut Self {
+impl<T: ClipboardHandler> ClipboardWatcher<T> for ClipboardWatcherContext<T> {
+	fn add_handler(&mut self, f: T) -> &mut Self {
 		self.handlers.push(f);
 		self
 	}
@@ -737,7 +737,9 @@ impl ClipboardWatcher for ClipboardWatcherContext {
 				}
 			};
 			if let Event::XfixesSelectionNotify(_) = event {
-				self.handlers.iter().for_each(|f| f());
+				self.handlers
+					.iter_mut()
+					.for_each(|handler| handler.on_clipboard_change());
 			}
 		}
 	}

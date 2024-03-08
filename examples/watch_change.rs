@@ -1,16 +1,34 @@
-use clipboard_rs::{Clipboard, ClipboardContext, ClipboardWatcher, ClipboardWatcherContext};
+use clipboard_rs::{
+	Clipboard, ClipboardContext, ClipboardHandler, ClipboardWatcher, ClipboardWatcherContext,
+};
 use std::{thread, time::Duration};
 
+struct Manager {
+	ctx: ClipboardContext,
+}
+
+impl Manager {
+	pub fn new() -> Self {
+		let ctx = ClipboardContext::new().unwrap();
+		Manager { ctx }
+	}
+}
+
+impl ClipboardHandler for Manager {
+	fn on_clipboard_change(&mut self) {
+		println!(
+			"on_clipboard_change, txt = {}",
+			self.ctx.get_text().unwrap()
+		);
+	}
+}
+
 fn main() {
-	let ctx = ClipboardContext::new().unwrap();
+	let manager = Manager::new();
+
 	let mut watcher = ClipboardWatcherContext::new().unwrap();
 
-	watcher.add_handler(Box::new(move || {
-		let content = ctx.get_text().unwrap();
-		println!("read:{}", content);
-	}));
-
-	let watcher_shutdown = watcher.get_shutdown_channel();
+	let watcher_shutdown = watcher.add_handler(manager).get_shutdown_channel();
 
 	thread::spawn(move || {
 		thread::sleep(Duration::from_secs(5));

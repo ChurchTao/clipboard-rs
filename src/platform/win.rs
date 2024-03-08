@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use crate::common::{CallBack, ContentData, Result, RustImage, RustImageData};
-use crate::{Clipboard, ClipboardContent, ClipboardWatcher, ContentFormat};
+use crate::common::{ContentData, Result, RustImage, RustImageData};
+use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
 use clipboard_win::raw::set_without_clear;
 use clipboard_win::types::c_uint;
 use clipboard_win::{
@@ -23,14 +23,14 @@ pub struct ClipboardContext {
 	format_map: HashMap<&'static str, c_uint>,
 }
 
-pub struct ClipboardWatcherContext {
-	handlers: Vec<CallBack>,
+pub struct ClipboardWatcherContext<T: ClipboardHandler> {
+	handlers: Vec<T>,
 	window: Window,
 }
 
 unsafe impl Send for ClipboardContext {}
 unsafe impl Sync for ClipboardContext {}
-unsafe impl Send for ClipboardWatcherContext {}
+unsafe impl<T: ClipboardHandler> Send for ClipboardWatcherContext<T> {}
 
 pub struct WatcherShutdown {
 	window: HWND,
@@ -101,8 +101,8 @@ impl ClipboardContext {
 	}
 }
 
-impl ClipboardWatcherContext {
-	pub fn new() -> Result<ClipboardWatcherContext> {
+impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
+	pub fn new() -> Result<Self> {
 		let window = match Window::from_builder(
 			windows_win::raw::window::Builder::new()
 				.class_name("STATIC")
@@ -395,8 +395,8 @@ impl Clipboard for ClipboardContext {
 	}
 }
 
-impl ClipboardWatcher for ClipboardWatcherContext {
-	fn add_handler(&mut self, f: CallBack) -> &mut Self {
+impl<T: ClipboardHandler> ClipboardWatcher<T> for ClipboardWatcherContext<T> {
+	fn add_handler(&mut self, f: T) -> &mut Self {
 		self.handlers.push(f);
 		self
 	}
@@ -417,8 +417,8 @@ impl ClipboardWatcher for ClipboardWatcherContext {
 						if msg.lParam == -1 {
 							break;
 						}
-						self.handlers.iter().for_each(|handler| {
-							handler();
+						self.handlers.iter_mut().for_each(|handler| {
+							handler.on_clipboard_change();
 						});
 					}
 					_ => panic!("Unexpected message"),
