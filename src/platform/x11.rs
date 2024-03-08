@@ -678,6 +678,8 @@ pub struct ClipboardWatcherContext<T: ClipboardHandler> {
 	stop_receiver: Receiver<()>,
 }
 
+unsafe impl<T: ClipboardHandler> Send for ClipboardWatcherContext<T> {}
+
 impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 	pub fn new() -> Result<Self> {
 		let (tx, rx) = mpsc::channel();
