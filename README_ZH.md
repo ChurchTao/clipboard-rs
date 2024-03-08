@@ -30,6 +30,10 @@ clipboard-rs = "0.1.2"
 
 ## 示例
 
+### 所有使用示例
+
+[Examples](examples)
+
 ### 简单读写
 
 ```rust
@@ -99,29 +103,48 @@ fn main() {
 ### 监听剪贴板变化
 
 ```rust
-use clipboard_rs::{Clipboard, ClipboardContext, ClipboardWatcher, ClipboardWatcherContext};
+use clipboard_rs::{
+	Clipboard, ClipboardContext, ClipboardHandler, ClipboardWatcher, ClipboardWatcherContext,
+};
 use std::{thread, time::Duration};
 
-fn main() {
-    let ctx = ClipboardContext::new().unwrap();
-    let mut watcher = ClipboardWatcherContext::new().unwrap();
-
-    watcher.add_handler(Box::new(move || {
-        let content = ctx.get_text().unwrap();
-        println!("read:{}", content);
-    }));
-
-    let watcher_shutdown = watcher.get_shutdown_channel();
-
-    thread::spawn(move || {
-        thread::sleep(Duration::from_secs(5));
-        println!("stop watch!");
-        watcher_shutdown.stop();
-    });
-
-    println!("start watch!");
-    watcher.start_watch();
+struct Manager {
+	ctx: ClipboardContext,
 }
+
+impl Manager {
+	pub fn new() -> Self {
+		let ctx = ClipboardContext::new().unwrap();
+		Manager { ctx }
+	}
+}
+
+impl ClipboardHandler for Manager {
+	fn on_clipboard_change(&mut self) {
+		println!(
+			"on_clipboard_change, txt = {}",
+			self.ctx.get_text().unwrap()
+		);
+	}
+}
+
+fn main() {
+	let manager = Manager::new();
+
+	let mut watcher = ClipboardWatcherContext::new().unwrap();
+
+	let watcher_shutdown = watcher.add_handler(manager).get_shutdown_channel();
+
+	thread::spawn(move || {
+		thread::sleep(Duration::from_secs(5));
+		println!("stop watch!");
+		watcher_shutdown.stop();
+	});
+
+	println!("start watch!");
+	watcher.start_watch();
+}
+
 
 ```
 
