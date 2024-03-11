@@ -209,8 +209,11 @@ impl Clipboard for ClipboardContext {
 	}
 
 	fn get_image(&self) -> Result<RustImageData> {
-		let image_raw_data = self.get_buffer(CF_PNG)?;
-		RustImageData::from_bytes(&image_raw_data)
+		let image_raw_data = self.get_buffer(CF_PNG);
+		match image_raw_data {
+			Ok(data) => RustImageData::from_bytes(&data),
+			Err(e) => Err(format!("Get image error, because of -> {}", e.to_string()).into()),
+		}
 	}
 
 	fn get_files(&self) -> Result<Vec<String>> {
