@@ -212,7 +212,7 @@ impl Clipboard for ClipboardContext {
 		let image_raw_data = self.get_buffer(CF_PNG);
 		match image_raw_data {
 			Ok(data) => RustImageData::from_bytes(&data),
-			Err(e) => Err(format!("Get image error, because of -> {}", e.to_string()).into()),
+			Err(e) => Err(format!("Get image error, because of -> {}", e).into()),
 		}
 	}
 
