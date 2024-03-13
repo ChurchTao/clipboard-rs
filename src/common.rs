@@ -96,7 +96,14 @@ pub struct RustImageBuffer(Vec<u8>);
 impl RustImageData {
 	pub fn as_bytes(&self) -> &[u8] {
 		match &self.data {
-			Some(image) => image.as_bytes(),
+			Some(image) => {
+				let mut buf = Cursor::new(Vec::new());
+				#[cfg(target_os = "windows")]
+				image.to_rgb8().write_to(&mut buf, ImageFormat::Bmp)?;
+				#[cfg(not(target_os = "windows"))]
+				image.write_to(&mut buf, ImageFormat::Png)?;
+				&buf.into_inner()
+			}
 			None => &[],
 		}
 	}
@@ -157,6 +164,16 @@ impl RustImage for RustImageData {
 		self.data.is_none()
 	}
 
+	fn from_path(path: &str) -> Result<Self> {
+		let image = image::open(path)?;
+		let (width, height) = image.dimensions();
+		Ok(RustImageData {
+			width,
+			height,
+			data: Some(image),
+		})
+	}
+
 	fn from_bytes(bytes: &[u8]) -> Result<Self> {
 		let image = image::load_from_memory(bytes)?;
 		let (width, height) = image.dimensions();
@@ -176,24 +193,14 @@ impl RustImage for RustImageData {
 		}
 	}
 
-	fn from_path(path: &str) -> Result<Self> {
-		let image = image::open(path)?;
-		let (width, height) = image.dimensions();
-		Ok(RustImageData {
-			width,
-			height,
-			data: Some(image),
-		})
-	}
-
 	fn get_size(&self) -> (u32, u32) {
 		(self.width, self.height)
 	}
 
-	fn resize(&self, width: u32, height: u32, filter: FilterType) -> Result<Self> {
+	fn thumbnail(&self, width: u32, height: u32) -> Result<Self> {
 		match &self.data {
 			Some(image) => {
-				let resized = image.resize_exact(width, height, filter);
+				let resized = image.thumbnail(width, height);
 				Ok(RustImageData {
 					width: resized.width(),
 					height: resized.height(),
@@ -204,20 +211,10 @@ impl RustImage for RustImageData {
 		}
 	}
 
-	fn save_to_path(&self, path: &str) -> Result<()> {
+	fn resize(&self, width: u32, height: u32, filter: FilterType) -> Result<Self> {
 		match &self.data {
 			Some(image) => {
-				image.save(path)?;
-				Ok(())
-			}
-			None => Err("image is empty".into()),
-		}
-	}
-
-	fn thumbnail(&self, width: u32, height: u32) -> Result<Self> {
-		match &self.data {
-			Some(image) => {
-				let resized = image.thumbnail(width, height);
+				let resized = image.resize_exact(width, height, filter);
 				Ok(RustImageData {
 					width: resized.width(),
 					height: resized.height(),
@@ -254,8 +251,18 @@ impl RustImage for RustImageData {
 		match &self.data {
 			Some(image) => {
 				let mut buf = Cursor::new(Vec::new());
-				image.write_to(&mut buf, ImageFormat::Bmp)?;
+				image.to_rgb8().write_to(&mut buf, ImageFormat::Bmp)?;
 				Ok(RustImageBuffer(buf.into_inner()))
+			}
+			None => Err("image is empty".into()),
+		}
+	}
+
+	fn save_to_path(&self, path: &str) -> Result<()> {
+		match &self.data {
+			Some(image) => {
+				image.save(path)?;
+				Ok(())
 			}
 			None => Err("image is empty".into()),
 		}
