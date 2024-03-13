@@ -2,15 +2,22 @@ name: Test
 
 on:
   push:
-    branches: [master]
-    paths-ignore:
-      - "README_ZH.md"
-      - "README.md"
+    branches:
+      - master
+    paths:
+      - '.github/workflows/test.yml'
+      - 'src/**/*.rs'
+      - 'tests/**/*.rs'
+      - 'Cargo.toml'
   pull_request:
-    branches: [master]
-    paths-ignore:
-      - "README_ZH.md"
-      - "README.md"
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - '**'
+    paths:
+      - '.github/workflows/test.yml'
+      - 'src/**/*.rs'
+      - 'tests/**/*.rs'
+      - 'Cargo.toml'
 
 jobs:
   rustfmt:

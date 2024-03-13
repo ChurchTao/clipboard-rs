@@ -1,18 +1,20 @@
-use std::collections::HashMap;
-
 use crate::common::{ContentData, Result, RustImage, RustImageData};
 use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
 use clipboard_win::raw::set_without_clear;
 use clipboard_win::types::c_uint;
 use clipboard_win::{
-	formats, get, get_clipboard, raw, set_clipboard, Clipboard as ClipboardWin, Setter, SysResult,
+	formats, get, get_clipboard, raw, set_clipboard, Clipboard as ClipboardWin, Monitor, Setter,
+	SysResult,
 };
 use image::EncodableLayout;
-use windows_win::sys::{
-	AddClipboardFormatListener, PostMessageW, RemoveClipboardFormatListener, HWND,
-	WM_CLIPBOARDUPDATE,
-};
-use windows_win::{Messages, Window};
+use std::collections::HashMap;
+use std::sync::mpsc::{Receiver, Sender};
+use std::thread;
+use std::time::Duration;
+
+pub struct WatcherShutdown {
+	stop_signal: Sender<()>,
+}
 
 static UNKNOWN_FORMAT: &str = "unknown format";
 static CF_RTF: &str = "Rich Text Format";
@@ -21,62 +23,30 @@ static CF_PNG: &str = "PNG";
 
 pub struct ClipboardContext {
 	format_map: HashMap<&'static str, c_uint>,
+	html_format: formats::Html,
 }
 
 pub struct ClipboardWatcherContext<T: ClipboardHandler> {
 	handlers: Vec<T>,
-	window: Window,
+	stop_signal: Sender<()>,
+	stop_receiver: Receiver<()>,
+	running: bool,
 }
 
 unsafe impl Send for ClipboardContext {}
 unsafe impl Sync for ClipboardContext {}
 unsafe impl<T: ClipboardHandler> Send for ClipboardWatcherContext<T> {}
-
-pub struct WatcherShutdown {
-	window: HWND,
-}
-
-impl Drop for WatcherShutdown {
-	fn drop(&mut self) {
-		unsafe { PostMessageW(self.window, WM_CLIPBOARDUPDATE, 0, -1) };
-	}
-}
-
-unsafe impl Send for WatcherShutdown {}
-
-pub struct ClipboardListener(HWND);
-
-impl ClipboardListener {
-	pub fn new(window: HWND) -> Result<Self> {
-		unsafe {
-			if AddClipboardFormatListener(window) != 1 {
-				Err("AddClipboardFormatListener failed".into())
-			} else {
-				Ok(ClipboardListener(window))
-			}
-		}
-	}
-}
-
-impl Drop for ClipboardListener {
-	fn drop(&mut self) {
-		unsafe {
-			RemoveClipboardFormatListener(self.0);
-		}
-	}
-}
+unsafe impl<T: ClipboardHandler> Sync for ClipboardWatcherContext<T> {}
 
 impl ClipboardContext {
 	pub fn new() -> Result<ClipboardContext> {
-		let _ = ClipboardWin::new_attempts(10)
-			.map_err(|code| format!("Open clipboard error, code = {}", code));
-		let format_map = {
-			let cf_html_uint = clipboard_win::register_format(CF_HTML);
+		let (format_map, html_format) = {
+			let cf_html_format = formats::Html::new();
 			let cf_rtf_uint = clipboard_win::register_format(CF_RTF);
 			let cf_png_uint = clipboard_win::register_format(CF_PNG);
 			let mut m: HashMap<&str, c_uint> = HashMap::new();
-			if let Some(cf_html) = cf_html_uint {
-				m.insert(CF_HTML, cf_html.get());
+			if let Some(cf_html) = cf_html_format {
+				m.insert(CF_HTML, cf_html.code());
 			}
 			if let Some(cf_rtf) = cf_rtf_uint {
 				m.insert(CF_RTF, cf_rtf.get());
@@ -84,9 +54,12 @@ impl ClipboardContext {
 			if let Some(cf_png) = cf_png_uint {
 				m.insert(CF_PNG, cf_png.get());
 			}
-			m
+			(m, cf_html_format)
 		};
-		Ok(ClipboardContext { format_map })
+		Ok(ClipboardContext {
+			format_map,
+			html_format: html_format.ok_or("register html format error")?,
+		})
 	}
 
 	fn get_format(&self, format: &ContentFormat) -> c_uint {
@@ -94,7 +67,7 @@ impl ClipboardContext {
 			ContentFormat::Text => formats::CF_UNICODETEXT,
 			ContentFormat::Rtf => *self.format_map.get(CF_RTF).unwrap(),
 			ContentFormat::Html => *self.format_map.get(CF_HTML).unwrap(),
-			ContentFormat::Image => *self.format_map.get(CF_PNG).unwrap(),
+			ContentFormat::Image => formats::CF_DIB,
 			ContentFormat::Files => formats::CF_HDROP,
 			ContentFormat::Other(format) => clipboard_win::register_format(format).unwrap().get(),
 		}
@@ -103,17 +76,12 @@ impl ClipboardContext {
 
 impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 	pub fn new() -> Result<Self> {
-		let window = match Window::from_builder(
-			windows_win::raw::window::Builder::new()
-				.class_name("STATIC")
-				.parent_message(),
-		) {
-			Ok(window) => window,
-			Err(code) => return Err(format!("Create window error, code = {}", code).into()),
-		};
+		let (tx, rx) = std::sync::mpsc::channel();
 		Ok(Self {
 			handlers: Vec::new(),
-			window,
+			stop_signal: tx,
+			stop_receiver: rx,
+			running: false,
 		})
 	}
 }
@@ -155,6 +123,7 @@ impl Clipboard for ClipboardContext {
 				// Currently only judge whether there is a png format
 				let cf_png_uint = self.format_map.get(CF_PNG).unwrap();
 				clipboard_win::is_format_avail(*cf_png_uint)
+					|| clipboard_win::is_format_avail(formats::CF_DIB)
 			}
 			ContentFormat::Files => clipboard_win::is_format_avail(formats::CF_HDROP),
 			ContentFormat::Other(format) => {
@@ -200,19 +169,33 @@ impl Clipboard for ClipboardContext {
 
 	fn get_rich_text(&self) -> Result<String> {
 		let rtf_raw_data = self.get_buffer(CF_RTF)?;
-		Ok(String::from_utf8(rtf_raw_data).unwrap_or_else(|_| "".to_string()))
+		Ok(String::from_utf8(rtf_raw_data)?)
 	}
 
 	fn get_html(&self) -> Result<String> {
-		let html_raw_data = self.get_buffer(CF_HTML)?;
-		cf_html_to_plain_html(html_raw_data)
+		let res: SysResult<String> = get_clipboard(self.html_format);
+		match res {
+			Ok(html) => Ok(html),
+			Err(e) => Err(format!("Get html error, code = {}", e).into()),
+		}
 	}
 
 	fn get_image(&self) -> Result<RustImageData> {
-		let image_raw_data = self.get_buffer(CF_PNG);
-		match image_raw_data {
-			Ok(data) => RustImageData::from_bytes(&data),
-			Err(e) => Err(format!("Get image error, because of -> {}", e).into()),
+		let has_bmp: bool = clipboard_win::is_format_avail(formats::CF_DIB);
+		if has_bmp {
+			// let slice = get_clipboard(formats::RawData(formats::CF_DIB))
+			// 	.map_err(|code| format!("Get image error, code = {}", code))?;
+			// let decoder = BmpDecoder::new_without_file_header(Cursor::new(slice))?;
+			// let no_hdr_img = DynamicImage::from_decoder(decoder)?;
+			// Ok(RustImageData::from_dynamic_image(no_hdr_img))
+			let res = get_clipboard(formats::Bitmap);
+			match res {
+				Ok(data) => RustImageData::from_bytes(&data),
+				Err(e) => Err(format!("Get image error, code = {}", e).into()),
+			}
+		} else {
+			let image_raw_data = self.get_buffer(CF_PNG)?;
+			RustImageData::from_bytes(&image_raw_data)
 		}
 	}
 
@@ -251,23 +234,19 @@ impl Clipboard for ClipboardContext {
 					}
 				}
 				ContentFormat::Html => {
-					let format_uint = self.get_format(format);
-					let buffer = get(formats::RawData(format_uint));
-					match buffer {
-						Ok(buffer) => {
-							let html = cf_html_to_plain_html(buffer)?;
+					let html_res: SysResult<String> = get(self.html_format);
+					match html_res {
+						Ok(html) => {
 							res.push(ClipboardContent::Html(html));
 						}
 						Err(_) => continue,
 					}
 				}
 				ContentFormat::Image => {
-					let format_uint = self.get_format(format);
-					let buffer = get(formats::RawData(format_uint));
-					match buffer {
-						Ok(buffer) => {
-							let image = RustImage::from_bytes(&buffer)?;
-							res.push(ClipboardContent::Image(image));
+					let img = self.get_image();
+					match img {
+						Ok(img) => {
+							res.push(ClipboardContent::Image(img));
 						}
 						Err(_) => continue,
 					}
@@ -320,14 +299,13 @@ impl Clipboard for ClipboardContext {
 	}
 
 	fn set_html(&self, html: String) -> Result<()> {
-		let cf_html = plain_html_to_cf_html(&html);
-		let res = self.set_buffer(CF_HTML, cf_html.as_bytes().to_vec());
+		let res = set_clipboard(self.html_format, &html);
 		res.map_err(|e| format!("set html error, code = {}", e).into())
 	}
 
 	fn set_image(&self, image: RustImageData) -> Result<()> {
-		let png = image.to_png()?;
-		let res = self.set_buffer(CF_PNG, png.get_bytes().to_vec());
+		let bmp = image.to_bitmap()?;
+		let res = set_clipboard(formats::Bitmap, bmp.get_bytes());
 		res.map_err(|e| format!("set image error, code = {}", e).into())
 	}
 
@@ -351,10 +329,20 @@ impl Clipboard for ClipboardContext {
 						continue;
 					}
 				}
-				ClipboardContent::Rtf(_)
-				| ClipboardContent::Html(_)
-				| ClipboardContent::Image(_)
-				| ClipboardContent::Other(_, _) => {
+				ClipboardContent::Html(html) => {
+					let res = set_clipboard(self.html_format, &html);
+					if res.is_err() {
+						continue;
+					}
+				}
+				ClipboardContent::Image(img) => {
+					// set image will clear clipboard
+					let res = self.set_image(img);
+					if res.is_err() {
+						continue;
+					}
+				}
+				ClipboardContent::Rtf(_) | ClipboardContent::Other(_, _) => {
 					let format_uint = self.get_format(&content.get_format());
 					let res = set_without_clear(format_uint, content.as_bytes());
 					if res.is_err() {
@@ -380,142 +368,54 @@ impl<T: ClipboardHandler> ClipboardWatcher<T> for ClipboardWatcherContext<T> {
 	}
 
 	fn start_watch(&mut self) {
-		let _guard = ClipboardListener::new(self.window.inner()).unwrap();
-		for msg in Messages::new()
-			.window(Some(self.window.inner()))
-			.low(Some(WM_CLIPBOARDUPDATE))
-			.high(Some(WM_CLIPBOARDUPDATE))
-		{
+		if self.running {
+			println!("already start watch!");
+			return;
+		}
+		if self.handlers.is_empty() {
+			println!("no handler, no need to start watch!");
+			return;
+		}
+		self.running = true;
+		let mut monitor = Monitor::new().expect("create monitor error");
+		let shutdown = monitor.shutdown_channel();
+		loop {
+			if self.stop_receiver.try_recv().is_ok() {
+				break;
+			}
+			let msg = monitor.try_recv();
 			match msg {
-				Ok(msg) => match msg.id() {
-					WM_CLIPBOARDUPDATE => {
-						let msg = msg.inner();
-
-						//Shutdown requested
-						if msg.lParam == -1 {
-							break;
-						}
-						self.handlers.iter_mut().for_each(|handler| {
-							handler.on_clipboard_change();
-						});
-					}
-					_ => panic!("Unexpected message"),
-				},
+				Ok(true) => {
+					self.handlers.iter_mut().for_each(|f| {
+						f.on_clipboard_change();
+					});
+				}
+				Ok(false) => {
+					// no change
+					thread::park_timeout(Duration::from_millis(200));
+					continue;
+				}
 				Err(e) => {
-					println!("msg: error: {:?}", e);
+					eprintln!("watch error, code = {}", e);
+					break;
 				}
 			}
 		}
+		drop(shutdown);
+		self.running = false;
 	}
 
 	fn get_shutdown_channel(&self) -> WatcherShutdown {
 		WatcherShutdown {
-			window: self.window.inner(),
+			stop_signal: self.stop_signal.clone(),
 		}
 	}
 }
 
-// https://learn.microsoft.com/en-us/windows/win32/dataxchg/html-clipboard-format
-// The description header includes the clipboard version number and offsets, indicating where the context and the fragment start and end. The description is a list of ASCII text keywords followed by a string and separated by a colon (:).
-// Version: vv version number of the clipboard. Starting version is . As of Windows 10 20H2 this is now .Version:0.9Version:1.0
-// StartHTML: Offset (in bytes) from the beginning of the clipboard to the start of the context, or if no context.-1
-// EndHTML: Offset (in bytes) from the beginning of the clipboard to the end of the context, or if no context.-1
-// StartFragment: Offset (in bytes) from the beginning of the clipboard to the start of the fragment.
-// EndFragment: Offset (in bytes) from the beginning of the clipboard to the end of the fragment.
-// StartSelection: Optional. Offset (in bytes) from the beginning of the clipboard to the start of the selection.
-// EndSelection: Optional. Offset (in bytes) from the beginning of the clipboard to the end of the selection.
-// The and keywords are optional and must both be omitted if you do not want the application to generate this information.StartSelectionEndSelection
-// Future revisions of the clipboard format may extend the header, for example, since the HTML starts at the offset then multiple and pairs could be added later to support noncontiguous selection of fragments.CF_HTMLStartHTMLStartFragmentEndFragment
-// example:
-// html=Version:1.0
-// StartHTML:000000096
-// EndHTML:000000375
-// StartFragment:000000096
-// EndFragment:000000375
-// <html><head><meta http-equiv="content-type" content="text/html; charset=UTF-8"></head><body><div style="background-color:#2b2b2b;color:#a9b7c6;font-family:'JetBrains Mono',monospace;font-size:9.8pt;"><pre><span style="color:#9876aa;">sellChannel</span></pre></div></body></html>
-fn cf_html_to_plain_html(cf_html: Vec<u8>) -> Result<String> {
-	let cf_html_str = String::from_utf8(cf_html)?;
-	let cf_html_bytes = cf_html_str.as_bytes();
-	let mut start_fragment_offset_in_bytes = 0;
-	let mut end_fragment_offset_in_bytes = 0;
-	for line in cf_html_str.lines() {
-		match line.split_once(':') {
-			Some((k, v)) => match k {
-				"StartFragment" => {
-					start_fragment_offset_in_bytes = v.trim_start_matches('0').parse::<usize>()?;
-				}
-				"EndFragment" => {
-					end_fragment_offset_in_bytes = v.trim_start_matches('0').parse::<usize>()?;
-				}
-				_ => {}
-			},
-			None => {
-				if start_fragment_offset_in_bytes != 0 && end_fragment_offset_in_bytes != 0 {
-					return Ok(String::from_utf8(
-						cf_html_bytes[start_fragment_offset_in_bytes..end_fragment_offset_in_bytes]
-							.to_vec(),
-					)?);
-				}
-			}
-		}
+impl Drop for WatcherShutdown {
+	fn drop(&mut self) {
+		let _ = self.stop_signal.send(());
 	}
-	// if no StartFragment and EndFragment, return the whole html
-	Ok(cf_html_str)
-}
-
-// cp from https://github.com/Devolutions/IronRDP/blob/37aa6426dba3272f38a2bb46a513144a326854ee/crates/ironrdp-cliprdr-format/src/html.rs#L91
-fn plain_html_to_cf_html(fragment: &str) -> String {
-	const POS_PLACEHOLDER: &str = "0000000000";
-
-	let mut buffer = String::new();
-
-	let mut write_header = |key: &str, value: &str| {
-		let size = key.len() + value.len() + ":\r\n".len();
-		buffer.reserve(size);
-
-		buffer.push_str(key);
-		buffer.push(':');
-		let value_pos = buffer.len();
-		buffer.push_str(value);
-		buffer.push_str("\r\n");
-
-		value_pos
-	};
-
-	write_header("Version", "0.9");
-
-	let start_html_header_value_pos = write_header("StartHTML", POS_PLACEHOLDER);
-	let end_html_header_value_pos = write_header("EndHTML", POS_PLACEHOLDER);
-	let start_fragment_header_value_pos = write_header("StartFragment", POS_PLACEHOLDER);
-	let end_fragment_header_value_pos = write_header("EndFragment", POS_PLACEHOLDER);
-
-	let start_html_pos = buffer.len();
-	buffer.push_str("<html>\r\n<body>\r\n<!--StartFragment-->");
-
-	let start_fragment_pos = buffer.len();
-	buffer.push_str(fragment);
-
-	let end_fragment_pos = buffer.len();
-	buffer.push_str("<!--EndFragment-->\r\n</body>\r\n</html>");
-
-	let end_html_pos = buffer.len();
-
-	let start_html_pos_value = format!("{:0>10}", start_html_pos);
-	let end_html_pos_value = format!("{:0>10}", end_html_pos);
-	let start_fragment_pos_value = format!("{:0>10}", start_fragment_pos);
-	let end_fragment_pos_value = format!("{:0>10}", end_fragment_pos);
-
-	let mut replace_placeholder = |value_begin_idx: usize, header_value: &str| {
-		let value_end_idx = value_begin_idx + POS_PLACEHOLDER.len();
-		buffer.replace_range(value_begin_idx..value_end_idx, header_value);
-	};
-
-	replace_placeholder(start_html_header_value_pos, &start_html_pos_value);
-	replace_placeholder(end_html_header_value_pos, &end_html_pos_value);
-	replace_placeholder(start_fragment_header_value_pos, &start_fragment_pos_value);
-	replace_placeholder(end_fragment_header_value_pos, &end_fragment_pos_value);
-
-	buffer
 }
 
 /// 将输入的 UTF-8 字符串转换为宽字符（UTF-16）字符串

@@ -1,5 +1,5 @@
 use image::imageops::FilterType;
-use image::{self, DynamicImage, GenericImageView};
+use image::{DynamicImage, GenericImageView, ImageFormat};
 use std::error::Error;
 use std::io::Cursor;
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
@@ -90,19 +90,6 @@ pub struct RustImageData {
 	data: Option<DynamicImage>,
 }
 
-macro_rules! handle_image_operation {
-	($self:expr, $operation:expr) => {
-		match &$self.data {
-			Some(image) => {
-				let mut buf = Cursor::new(Vec::new());
-				image.write_to(&mut buf, $operation)?;
-				Ok(RustImageBuffer(buf.into_inner()))
-			}
-			None => Err("image is empty".into()),
-		}
-	};
-}
-
 /// 此处的 RustImageBuffer 已经是带有图片格式的字节流，例如 png,jpeg;
 pub struct RustImageBuffer(Vec<u8>);
 
@@ -127,6 +114,8 @@ pub trait RustImage: Sized {
 	/// Create a new image from a byte slice
 	fn from_bytes(bytes: &[u8]) -> Result<Self>;
 
+	fn from_dynamic_image(image: DynamicImage) -> Self;
+
 	/// width and height
 	fn get_size(&self) -> (u32, u32);
 
@@ -144,10 +133,7 @@ pub trait RustImage: Sized {
 	/// zh: 调整图片大小，不保留长宽比
 	fn resize(&self, width: u32, height: u32, filter: FilterType) -> Result<Self>;
 
-	/// en: Convert image to jpeg format, quality is the quality, give a value of 0-100, 100 is the highest quality,
-	/// the returned image is a new image, and the data itself will not be modified
-	/// zh: 把图片转为 jpeg 格式，quality(0-100) 为质量，输出字节数组，可直接通过 io 写入文件
-	fn to_jpeg(&self, quality: u8) -> Result<RustImageBuffer>;
+	fn to_jpeg(&self) -> Result<RustImageBuffer>;
 
 	/// en: Convert to png format, the returned image is a new image, and the data itself will not be modified
 	/// zh: 转为 png 格式,返回的为新的图片，本身数据不会修改
@@ -179,6 +165,15 @@ impl RustImage for RustImageData {
 			height,
 			data: Some(image),
 		})
+	}
+
+	fn from_dynamic_image(image: DynamicImage) -> Self {
+		let (width, height) = image.dimensions();
+		RustImageData {
+			width,
+			height,
+			data: Some(image),
+		}
 	}
 
 	fn from_path(path: &str) -> Result<Self> {
@@ -233,16 +228,37 @@ impl RustImage for RustImageData {
 		}
 	}
 
-	fn to_jpeg(&self, quality: u8) -> Result<RustImageBuffer> {
-		handle_image_operation!(self, image::ImageOutputFormat::Jpeg(quality))
+	fn to_jpeg(&self) -> Result<RustImageBuffer> {
+		match &self.data {
+			Some(image) => {
+				let mut buf = Cursor::new(Vec::new());
+				image.write_to(&mut buf, ImageFormat::Jpeg)?;
+				Ok(RustImageBuffer(buf.into_inner()))
+			}
+			None => Err("image is empty".into()),
+		}
 	}
 
 	fn to_png(&self) -> Result<RustImageBuffer> {
-		handle_image_operation!(self, image::ImageOutputFormat::Png)
+		match &self.data {
+			Some(image) => {
+				let mut buf = Cursor::new(Vec::new());
+				image.write_to(&mut buf, ImageFormat::Png)?;
+				Ok(RustImageBuffer(buf.into_inner()))
+			}
+			None => Err("image is empty".into()),
+		}
 	}
 
 	fn to_bitmap(&self) -> Result<RustImageBuffer> {
-		handle_image_operation!(self, image::ImageOutputFormat::Bmp)
+		match &self.data {
+			Some(image) => {
+				let mut buf = Cursor::new(Vec::new());
+				image.write_to(&mut buf, ImageFormat::Bmp)?;
+				Ok(RustImageBuffer(buf.into_inner()))
+			}
+			None => Err("image is empty".into()),
+		}
 	}
 }
 
