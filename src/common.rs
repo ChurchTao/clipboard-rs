@@ -42,7 +42,8 @@ impl ContentData for ClipboardContent {
 			ClipboardContent::Text(data) => data.as_bytes(),
 			ClipboardContent::Rtf(data) => data.as_bytes(),
 			ClipboardContent::Html(data) => data.as_bytes(),
-			ClipboardContent::Image(data) => data.as_bytes(),
+			// dynamic image is not supported to as bytes
+			ClipboardContent::Image(_) => &[],
 			ClipboardContent::Files(data) => {
 				// use first file path as data
 				if let Some(path) = data.first() {
@@ -92,22 +93,6 @@ pub struct RustImageData {
 
 /// 此处的 RustImageBuffer 已经是带有图片格式的字节流，例如 png,jpeg;
 pub struct RustImageBuffer(Vec<u8>);
-
-impl RustImageData {
-	pub fn as_bytes(&self) -> &[u8] {
-		match &self.data {
-			Some(image) => {
-				let mut buf = Cursor::new(Vec::new());
-				#[cfg(target_os = "windows")]
-				image.to_rgb8().write_to(&mut buf, ImageFormat::Bmp)?;
-				#[cfg(not(target_os = "windows"))]
-				image.write_to(&mut buf, ImageFormat::Png)?;
-				&buf.into_inner()
-			}
-			None => &[],
-		}
-	}
-}
 
 pub trait RustImage: Sized {
 	/// create an empty image
@@ -251,7 +236,7 @@ impl RustImage for RustImageData {
 		match &self.data {
 			Some(image) => {
 				let mut buf = Cursor::new(Vec::new());
-				image.to_rgb8().write_to(&mut buf, ImageFormat::Bmp)?;
+				image.write_to(&mut buf, ImageFormat::Bmp)?;
 				Ok(RustImageBuffer(buf.into_inner()))
 			}
 			None => Err("image is empty".into()),

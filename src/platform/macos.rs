@@ -431,6 +431,20 @@ impl ClipboardContent {
 					format: ContentFormat::Files,
 				}
 			}
+			ClipboardContent::Image(image) => {
+				let png = image.to_png()?;
+				WriteToClipboardData {
+					data: unsafe {
+						NSData::dataWithBytes_length_(
+							nil,
+							png.get_bytes().as_ptr() as *const c_void,
+							png.get_bytes().len() as u64,
+						)
+					},
+					is_multi: false,
+					format: ContentFormat::Image,
+				}
+			}
 			_ => WriteToClipboardData {
 				data: unsafe {
 					NSData::dataWithBytes_length_(

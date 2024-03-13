@@ -1,5 +1,6 @@
 use crate::common::{ContentData, Result, RustImage, RustImageData};
 use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
+use clipboard_win::formats::CF_DIBV5;
 use clipboard_win::raw::set_without_clear;
 use clipboard_win::types::c_uint;
 use clipboard_win::{
@@ -183,12 +184,7 @@ impl Clipboard for ClipboardContext {
 	fn get_image(&self) -> Result<RustImageData> {
 		let has_bmp: bool = clipboard_win::is_format_avail(formats::CF_DIB);
 		if has_bmp {
-			// let slice = get_clipboard(formats::RawData(formats::CF_DIB))
-			// 	.map_err(|code| format!("Get image error, code = {}", code))?;
-			// let decoder = BmpDecoder::new_without_file_header(Cursor::new(slice))?;
-			// let no_hdr_img = DynamicImage::from_decoder(decoder)?;
-			// Ok(RustImageData::from_dynamic_image(no_hdr_img))
-			let res = get_clipboard(formats::Bitmap);
+			let res = get_clipboard(formats::RawData(formats::CF_DIBV5));
 			match res {
 				Ok(data) => RustImageData::from_bytes(&data),
 				Err(e) => Err(format!("Get image error, code = {}", e).into()),
@@ -305,7 +301,7 @@ impl Clipboard for ClipboardContext {
 
 	fn set_image(&self, image: RustImageData) -> Result<()> {
 		let bmp = image.to_bitmap()?;
-		let res = set_clipboard(formats::Bitmap, bmp.get_bytes());
+		let res = set_clipboard(formats::RawData(CF_DIBV5), bmp.get_bytes());
 		res.map_err(|e| format!("set image error, code = {}", e).into())
 	}
 

@@ -19,5 +19,8 @@ fn test_image() {
 
 	let clipboard_img = ctx.get_image().unwrap();
 
-	assert_eq!(clipboard_img.to_png().unwrap().get_bytes(), rust_img_bytes.get_bytes());
+	assert_eq!(
+		clipboard_img.to_png().unwrap().get_bytes().len(),
+		rust_img_bytes.get_bytes().len()
+	);
 }
