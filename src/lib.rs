@@ -1,6 +1,6 @@
 pub mod common;
 mod platform;
-pub use common::{CallBack, ClipboardContent, ContentFormat, Result, RustImageData};
+pub use common::{ClipboardContent, ClipboardHandler, ContentFormat, Result, RustImageData};
 pub use image::imageops::FilterType;
 pub use platform::{ClipboardContext, ClipboardWatcherContext, WatcherShutdown};
 pub trait Clipboard: Send {
@@ -51,16 +51,23 @@ pub trait Clipboard: Send {
 	fn set(&self, contents: Vec<ClipboardContent>) -> Result<()>;
 }
 
-pub trait ClipboardWatcher: Send {
-	fn add_handler(&mut self, f: CallBack) -> &mut Self;
+pub trait ClipboardWatcher<T: ClipboardHandler>: Send {
+	/// zh: 添加一个剪切板变化处理器，可以添加多个处理器，处理器需要实现 ClipboardHandler 这个trait
+	/// en: Add a clipboard change handler, you can add multiple handlers, the handler needs to implement the trait ClipboardHandler
+	fn add_handler(&mut self, handler: T) -> &mut Self;
 
+	/// zh: 开始监视剪切板变化，这是一个阻塞方法，直到监视结束，或者调用了stop方法，所以建议在单独的线程中调用
+	/// en: Start monitoring clipboard changes, this is a blocking method, until the monitoring ends, or the stop method is called, so it is recommended to call it in a separate thread
 	fn start_watch(&mut self);
 
+	/// zh: 获得停止监视的通道，可以通过这个通道停止监视
+	/// en: Get the channel to stop monitoring, you can stop monitoring through this channel
 	fn get_shutdown_channel(&self) -> WatcherShutdown;
 }
 
 impl WatcherShutdown {
-	///Signals shutdown
+	/// zh: 停止监视
+	/// en: stop watching
 	pub fn stop(self) {
 		drop(self);
 	}

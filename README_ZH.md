@@ -30,27 +30,37 @@ clipboard-rs = "0.1.2"
 
 ## 示例
 
+### 所有使用示例
+
+[Examples](examples)
+
 ### 简单读写
 
 ```rust
-use clipboard_rs::{Clipboard, ClipboardContext};
+use clipboard_rs::{Clipboard, ClipboardContext, ContentFormat};
 
 fn main() {
-    let ctx = ClipboardContext::new().unwrap();
-    let types = ctx.available_formats().unwrap();
-    println!("{:?}", types);
+	let ctx = ClipboardContext::new().unwrap();
+	let types = ctx.available_formats().unwrap();
+	println!("{:?}", types);
 
-    let rtf = ctx.get_rich_text().unwrap();
+	let has_rtf = ctx.has(ContentFormat::Rtf);
+	println!("has_rtf={}", has_rtf);
 
-    println!("rtf={}", rtf);
+	let rtf = ctx.get_rich_text().unwrap_or("".to_string());
 
-    let html = ctx.get_html().unwrap();
+	println!("rtf={}", rtf);
 
-    println!("html={}", html);
+	let has_html = ctx.has(ContentFormat::Html);
+	println!("has_html={}", has_html);
 
-    let content = ctx.get_text().unwrap();
+	let html = ctx.get_html().unwrap_or("".to_string());
 
-    println!("txt={}", content);
+	println!("html={}", html);
+
+	let content = ctx.get_text().unwrap_or("".to_string());
+
+	println!("txt={}", content);
 }
 
 ```
@@ -60,18 +70,30 @@ fn main() {
 ```rust
 use clipboard_rs::{common::RustImage, Clipboard, ClipboardContext};
 
+const TMP_PATH: &str = "/tmp/";
+
 fn main() {
-    let ctx = ClipboardContext::new().unwrap();
-    let types = ctx.available_formats().unwrap();
-    println!("{:?}", types);
+	let ctx = ClipboardContext::new().unwrap();
+	let types = ctx.available_formats().unwrap();
+	println!("{:?}", types);
 
-    let img = ctx.get_image().unwrap();
+	let img = ctx.get_image();
 
-    img.save_to_path("/tmp/test.png").unwrap();
+	match img {
+		Ok(img) => {
+			img.save_to_path(format!("{}test.png", TMP_PATH).as_str())
+				.unwrap();
 
-    let resize_img = img.thumbnail(300, 300).unwrap();
+			let resize_img = img.thumbnail(300, 300).unwrap();
 
-    resize_img.save_to_path("/tmp/test_thumbnail.png").unwrap();
+			resize_img
+				.save_to_path(format!("{}test_thumbnail.png", TMP_PATH).as_str())
+				.unwrap();
+		}
+		Err(err) => {
+			println!("err={}", err);
+		}
+	}
 }
 
 
@@ -99,29 +121,48 @@ fn main() {
 ### 监听剪贴板变化
 
 ```rust
-use clipboard_rs::{Clipboard, ClipboardContext, ClipboardWatcher, ClipboardWatcherContext};
+use clipboard_rs::{
+	Clipboard, ClipboardContext, ClipboardHandler, ClipboardWatcher, ClipboardWatcherContext,
+};
 use std::{thread, time::Duration};
 
-fn main() {
-    let ctx = ClipboardContext::new().unwrap();
-    let mut watcher = ClipboardWatcherContext::new().unwrap();
-
-    watcher.add_handler(Box::new(move || {
-        let content = ctx.get_text().unwrap();
-        println!("read:{}", content);
-    }));
-
-    let watcher_shutdown = watcher.get_shutdown_channel();
-
-    thread::spawn(move || {
-        thread::sleep(Duration::from_secs(5));
-        println!("stop watch!");
-        watcher_shutdown.stop();
-    });
-
-    println!("start watch!");
-    watcher.start_watch();
+struct Manager {
+	ctx: ClipboardContext,
 }
+
+impl Manager {
+	pub fn new() -> Self {
+		let ctx = ClipboardContext::new().unwrap();
+		Manager { ctx }
+	}
+}
+
+impl ClipboardHandler for Manager {
+	fn on_clipboard_change(&mut self) {
+		println!(
+			"on_clipboard_change, txt = {}",
+			self.ctx.get_text().unwrap()
+		);
+	}
+}
+
+fn main() {
+	let manager = Manager::new();
+
+	let mut watcher = ClipboardWatcherContext::new().unwrap();
+
+	let watcher_shutdown = watcher.add_handler(manager).get_shutdown_channel();
+
+	thread::spawn(move || {
+		thread::sleep(Duration::from_secs(5));
+		println!("stop watch!");
+		watcher_shutdown.stop();
+	});
+
+	println!("start watch!");
+	watcher.start_watch();
+}
+
 
 ```
 
