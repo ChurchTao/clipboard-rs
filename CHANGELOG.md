@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.3 (2024-03-14) [released]
+
+- Fix: Fix the bug on `Windows` can't read DIBV5 format image from clipboard [issues#8](https://github.com/ChurchTao/clipboard-rs/issues/8)
+- Fix: Fix the bug on `Windows` can't move `WatcherContext` to another thread [issues#4](https://github.com/ChurchTao/clipboard-rs/issues/4)
+- Change: Demo `watch_change.rs` The callback function for monitoring changes in the clipboard is changed to implement a trait. [pr#6](https://github.com/ChurchTao/clipboard-rs/pull/6)
+
 ## v0.1.2 (2024-03-08) [released]
 
 - Change `rust-version = "1.75.0"` to `rust-version = "1.63.0"` [pr#3](https://github.com/ChurchTao/clipboard-rs/pull/3)
