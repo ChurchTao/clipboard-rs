@@ -1,0 +1,21 @@
+name: 📖 Topic discussion
+description: Submit a topic for discussion
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for submitting a topic discussion! 如果你是中国用户,可以使用中文提交issue,我看得懂中文。
+  - type: input
+    id: topic
+    attributes:
+      label: Topic | 话题
+    validations:
+      required: true
+  - type: textarea
+    id: discussion
+    attributes:
+      label: Discussion | 讨论
+      placeholder:
+        Anything you like.
+    validations:
+      required: true

@@ -1,0 +1,23 @@
+name: ⭐ Feature Request
+description: Submit a feature request
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for submitting a feature request! 如果你是中国用户,可以使用中文提交issue,我看得懂中文。
+  - type: textarea
+    id: the-feature-request
+    attributes:
+      label: The feature request | 需求描述
+      description:
+        Write a clear and concise description of what the feature or problem is.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution | 解决方案
+      placeholder:
+        Describe the solution you'd like to see.
+    validations:
+      required: true
