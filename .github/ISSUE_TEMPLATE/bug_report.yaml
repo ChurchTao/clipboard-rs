@@ -1,0 +1,38 @@
+name: 🐛 Bug Report
+description: File a bug report
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug report! 如果你是中国用户,可以使用中文提交issue,我看得懂中文。
+  - type: textarea
+    id: the-problem
+    attributes:
+      label: The problem | 问题描述
+      placeholder:
+        Describe the issue you are experiencing.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Release version | 版本
+      description:
+        The version of crate you are using.
+    validations:
+      required: true
+  - type: input
+    id: operating-system
+    attributes:
+      label: Operating system | 操作系统
+      description:
+        'Enter the specific operating system version you are running (example:
+        Windows 10)'
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs | 日志
+      placeholder:
+        You can provide logs here, if applicable.
