@@ -1,5 +1,11 @@
 # clipboard-rs
 
+[![Latest version](https://img.shields.io/crates/v/clipboard-rs?color=mediumvioletred)](https://crates.io/crates/clipboard-rs)
+[![Documentation](https://docs.rs/clipboard-rs/badge.svg)](https://docs.rs/clipboard-rs)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/ChurchTao/clipboard-rs/test.yml)
+![MSRV](https://img.shields.io/badge/rustc-1.63+-blue.svg)
+![GitHub License](https://img.shields.io/github/license/ChurchTao/clipboard-rs)
+
 clipboard-rs is a cross-platform library written in Rust for getting and setting the system-level clipboard content. It supports Linux, Windows, and MacOS.
 
 [简体中文](README_ZH.md)
