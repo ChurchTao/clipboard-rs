@@ -136,6 +136,21 @@ pub trait RustImage: Sized {
 	fn save_to_path(&self, path: &str) -> Result<()>;
 }
 
+macro_rules! image_to_format {
+	($name:ident, $format:expr) => {
+		fn $name(&self) -> Result<RustImageBuffer> {
+			match &self.data {
+				Some(image) => {
+					let mut bytes: Vec<u8> = Vec::new();
+					image.write_to(&mut Cursor::new(&mut bytes), $format)?;
+					Ok(RustImageBuffer(bytes))
+				}
+				None => Err("image is empty".into()),
+			}
+		}
+	};
+}
+
 impl RustImage for RustImageData {
 	fn empty() -> Self {
 		RustImageData {
@@ -210,38 +225,11 @@ impl RustImage for RustImageData {
 		}
 	}
 
-	fn to_jpeg(&self) -> Result<RustImageBuffer> {
-		match &self.data {
-			Some(image) => {
-				let mut buf = Cursor::new(Vec::new());
-				image.write_to(&mut buf, ImageFormat::Jpeg)?;
-				Ok(RustImageBuffer(buf.into_inner()))
-			}
-			None => Err("image is empty".into()),
-		}
-	}
+	image_to_format!(to_jpeg, ImageFormat::Jpeg);
 
-	fn to_png(&self) -> Result<RustImageBuffer> {
-		match &self.data {
-			Some(image) => {
-				let mut buf = Cursor::new(Vec::new());
-				image.write_to(&mut buf, ImageFormat::Png)?;
-				Ok(RustImageBuffer(buf.into_inner()))
-			}
-			None => Err("image is empty".into()),
-		}
-	}
+	image_to_format!(to_png, ImageFormat::Png);
 
-	fn to_bitmap(&self) -> Result<RustImageBuffer> {
-		match &self.data {
-			Some(image) => {
-				let mut buf = Cursor::new(Vec::new());
-				image.write_to(&mut buf, ImageFormat::Bmp)?;
-				Ok(RustImageBuffer(buf.into_inner()))
-			}
-			None => Err("image is empty".into()),
-		}
-	}
+	image_to_format!(to_bitmap, ImageFormat::Bmp);
 
 	fn save_to_path(&self, path: &str) -> Result<()> {
 		match &self.data {

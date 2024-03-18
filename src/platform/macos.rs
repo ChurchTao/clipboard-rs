@@ -124,7 +124,7 @@ impl ClipboardContext {
 	fn read_string(&self, ns_type: id) -> Result<String> {
 		let res = unsafe {
 			let ns_string: id = self.clipboard.stringForType(ns_type);
-			if ns_string.len() == 0 {
+			if ns_string == nil || ns_string.len() == 0 {
 				return Ok("".to_owned());
 			}
 			let bytes = ns_string.UTF8String();
@@ -289,21 +289,23 @@ impl Clipboard for ClipboardContext {
 
 	fn get_files(&self) -> Result<Vec<String>> {
 		let res = unsafe {
-			let ns_array: id = self.clipboard.pasteboardItems();
-			if ns_array.count() == 0 {
+			let has_files = self.has(ContentFormat::Files);
+			if !has_files {
 				return Ok(vec![]);
 			}
-			ns_array
-				.iter()
-				.map(|ns_pasteboard_item| {
-					let ns_string: id =
-						ns_pasteboard_item.stringForType(NSString::alloc(nil).init_str(NS_FILES));
+			let ns_array: id = self.clipboard.pasteboardItems();
+			let mut res = vec![];
+			for ns_pasteboard_item in ns_array.iter() {
+				let ns_string: id =
+					ns_pasteboard_item.stringForType(NSString::alloc(nil).init_str(NS_FILES));
+				if ns_string != nil {
 					let bytes = ns_string.UTF8String();
 					let c_str = CStr::from_ptr(bytes);
 					let str_slice = c_str.to_str()?;
-					Ok(str_slice.to_owned())
-				})
-				.collect::<Result<Vec<String>>>()?
+					res.push(str_slice.to_owned());
+				}
+			}
+			res
 		};
 		Ok(res)
 	}
@@ -391,6 +393,9 @@ impl Clipboard for ClipboardContext {
 	}
 
 	fn set_files(&self, file: Vec<String>) -> Result<()> {
+		if file.is_empty() {
+			return Err("file list is empty".into());
+		}
 		unsafe {
 			let ns_string_arr = file
 				.iter()
@@ -407,6 +412,11 @@ impl Clipboard for ClipboardContext {
 	}
 
 	fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
+		if contents.is_empty() {
+			return Err(
+				"contents is empty, if you want to clear clipboard, please use clear method".into(),
+			);
+		}
 		let mut write_data_vec = vec![];
 		for content in contents {
 			let write_data = content.to_write_data()?;
