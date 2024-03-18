@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.4 (2024-03-18) [released]
+
+- Fix: Fix the bug `fn read_files()` where no files in clipboard. [issues#11](https://github.com/ChurchTao/clipboard-rs/issues/11)
+
 ## v0.1.3 (2024-03-14) [released]
 
 - Fix: Fix the bug on `Windows` can't read DIBV5 format image from clipboard [issues#8](https://github.com/ChurchTao/clipboard-rs/issues/8)
