@@ -7,8 +7,10 @@ use clipboard_win::{
 	formats, get, get_clipboard, raw, set_clipboard, Clipboard as ClipboardWin, Monitor, Setter,
 	SysResult,
 };
-use image::EncodableLayout;
+use image::codecs::bmp::BmpDecoder;
+use image::{DynamicImage, EncodableLayout};
 use std::collections::HashMap;
+use std::io::Cursor;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::time::Duration;
@@ -182,9 +184,27 @@ impl Clipboard for ClipboardContext {
 	}
 
 	fn get_image(&self) -> Result<RustImageData> {
-		let has_bmp: bool = clipboard_win::is_format_avail(formats::CF_DIB);
+		let has_bmp: bool = clipboard_win::is_format_avail(formats::CF_DIBV5);
 		if has_bmp {
 			let res = get_clipboard(formats::RawData(formats::CF_DIBV5));
+			match res {
+				Ok(data) => {
+					let decoder = {
+						// if data.as_slice().starts_with(b"BM") {
+						// 	BmpDecoder::new(Cursor::new(data.as_slice()))
+						// } else {
+						BmpDecoder::new_without_file_header(Cursor::new(data.as_slice()))
+						// }
+					};
+					let decoder = decoder.map_err(|e| format!("{}", e))?;
+					let dynamic_image =
+						DynamicImage::from_decoder(decoder).map_err(|e| format!("{}", e))?;
+					Ok(RustImageData::from_dynamic_image(dynamic_image))
+				}
+				Err(e) => Err(format!("Get image error, code = {}", e).into()),
+			}
+		} else if clipboard_win::is_format_avail(formats::CF_DIB) {
+			let res = get_clipboard(formats::Bitmap);
 			match res {
 				Ok(data) => RustImageData::from_bytes(&data),
 				Err(e) => Err(format!("Get image error, code = {}", e).into()),
@@ -301,7 +321,9 @@ impl Clipboard for ClipboardContext {
 
 	fn set_image(&self, image: RustImageData) -> Result<()> {
 		let bmp = image.to_bitmap()?;
-		let res = set_clipboard(formats::RawData(CF_DIBV5), bmp.get_bytes());
+		let bytes = bmp.get_bytes();
+		let no_file_header_bytes = &bytes[14..];
+		let res = set_clipboard(formats::RawData(CF_DIBV5), no_file_header_bytes);
 		res.map_err(|e| format!("set image error, code = {}", e).into())
 	}
 
