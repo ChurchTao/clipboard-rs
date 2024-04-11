@@ -1,6 +1,6 @@
 [package]
 name = "clipboard-rs"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["ChurchTao <swkzymlyy@gmail.com>"]
 description = "Cross-platform clipboard API (text | image | rich text | html | files | monitoring changes) | 跨平台剪贴板 API(文本|图片|富文本|html|文件|监听变化) Windows,MacOS,Linux"
 repository = "https://github.com/ChurchTao/clipboard-rs"
@@ -15,7 +15,7 @@ rust-version = "1.63.0"
 image = "0.25"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-clipboard-win = { version = "5.2.0", features = ["monitor"] }
+clipboard-win = { version = "5.3.0", features = ["monitor"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.25.0"

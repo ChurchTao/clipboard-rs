@@ -24,14 +24,18 @@ fn main() {
 
 	match img {
 		Ok(img) => {
-			img.save_to_path(format!("{}test.png", TMP_PATH).as_str())
+			let _ = img
+				.save_to_path(format!("{}test.png", TMP_PATH).as_str())
+				.map_err(|e| println!("save test.png err={}", e));
+
+			let resize_img = img
+				.thumbnail(300, 300)
+				.map_err(|e| println!("thumbnail err={}", e))
 				.unwrap();
 
-			let resize_img = img.thumbnail(300, 300).unwrap();
-
-			resize_img
+			let _ = resize_img
 				.save_to_path(format!("{}test_thumbnail.png", TMP_PATH).as_str())
-				.unwrap();
+				.map_err(|e| println!("save test_thumbnail.png err={}", e));
 		}
 		Err(err) => {
 			println!("err={}", err);

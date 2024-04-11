@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.5 (2024-04-11) [released]
+
+- Fix: Fix the bug `fn get_image()` where image type is `CF_DIBV5` in `win11`. [issues#14](https://github.com/ChurchTao/clipboard-rs/issues/14)
+
 ## v0.1.4 (2024-03-18) [released]
 
 - Fix: Fix the bug `fn read_files()` where no files in clipboard. [issues#11](https://github.com/ChurchTao/clipboard-rs/issues/11)
