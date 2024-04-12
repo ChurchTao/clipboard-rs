@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.6 (2024-04-12) [released]
+
+- Fix: Bug: Cannot paste after writing image to clipboard (on Windows) #17 [issues#17](https://github.com/ChurchTao/clipboard-rs/issues/17)
+- Fix: Bug: No transparent background for clipboard image read on Windows #18 [issues#18](https://github.com/ChurchTao/clipboard-rs/issues/18)
+- Fix: Bug: Cannot read clipboard image on MacOS for screenshots taken by certain apps #19 [issues#19](https://github.com/ChurchTao/clipboard-rs/issues/19)
+
 ## v0.1.5 (2024-04-11) [released]
 
 - Fix: Fix the bug `fn get_image()` where image type is `CF_DIBV5` in `win11`. [issues#14](https://github.com/ChurchTao/clipboard-rs/issues/14)
