@@ -1,8 +1,8 @@
 use crate::common::{ContentData, Result, RustImage, RustImageData};
 use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
 use cocoa::appkit::{
-	NSFilenamesPboardType, NSPasteboard, NSPasteboardTypeHTML, NSPasteboardTypePNG,
-	NSPasteboardTypeRTF, NSPasteboardTypeString,
+	NSFilenamesPboardType, NSImage, NSPasteboard, NSPasteboardTypeHTML, NSPasteboardTypePNG,
+	NSPasteboardTypeRTF, NSPasteboardTypeString, NSPasteboardTypeTIFF,
 };
 use cocoa::base::{id, nil};
 use cocoa::foundation::{NSArray, NSData, NSFastEnumeration, NSString};
@@ -223,7 +223,8 @@ impl Clipboard for ClipboardContext {
 			},
 			ContentFormat::Image => unsafe {
 				// Currently only judge whether there is a png format
-				let types = NSArray::arrayWithObjects(nil, &[NSPasteboardTypePNG]);
+				let types =
+					NSArray::arrayWithObjects(nil, &[NSPasteboardTypePNG, NSPasteboardTypeTIFF]);
 				self.clipboard.availableTypeFromArray(types) != nil
 			},
 			ContentFormat::Files => unsafe {
@@ -275,16 +276,25 @@ impl Clipboard for ClipboardContext {
 	}
 
 	fn get_image(&self) -> Result<RustImageData> {
-		let res = unsafe {
-			let ns_data = self.clipboard.dataForType(NSPasteboardTypePNG);
-			if ns_data.length() == 0 {
-				return Ok(RustImageData::empty());
+		unsafe {
+			let png_data = self.clipboard.dataForType(NSPasteboardTypePNG);
+			if png_data != nil && png_data.length() > 0 {
+				let length: usize = png_data.length() as usize;
+				let bytes = slice::from_raw_parts(png_data.bytes() as *const u8, length);
+				return RustImageData::from_bytes(bytes);
 			}
-			let length: usize = ns_data.length() as usize;
-			let bytes = slice::from_raw_parts(ns_data.bytes() as *const u8, length);
-			RustImageData::from_bytes(bytes)?
-		};
-		Ok(res)
+			// if no png data, read NSImage;
+			let ns_image = NSImage::initWithPasteboard_(NSImage::alloc(nil), self.clipboard);
+			if ns_image != nil {
+				let tiff_data = ns_image.TIFFRepresentation();
+				if tiff_data != nil && tiff_data.length() > 0 {
+					let length: usize = tiff_data.length() as usize;
+					let bytes = slice::from_raw_parts(tiff_data.bytes() as *const u8, length);
+					return RustImageData::from_bytes(bytes);
+				}
+			}
+			Err("no image data".into())
+		}
 	}
 
 	fn get_files(&self) -> Result<Vec<String>> {
@@ -510,9 +520,9 @@ fn convert_to_clipboard_content(
 			}
 			ContentFormat::Image => match ns_pasteboard_item_arr.first() {
 				Some(ns_pasteboard_item) => {
-					let ns_data = ns_pasteboard_item.dataForType(ns_type);
+					let mut ns_data = ns_pasteboard_item.dataForType(ns_type);
 					if ns_data.length() == 0 {
-						return ClipboardContent::Image(RustImageData::empty());
+						ns_data = ns_pasteboard_item.dataForType(NSPasteboardTypeTIFF);
 					}
 					let length: usize = ns_data.length() as usize;
 					let bytes = slice::from_raw_parts(ns_data.bytes() as *const u8, length);
