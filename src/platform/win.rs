@@ -1,6 +1,6 @@
 use crate::common::{ContentData, Result, RustImage, RustImageData};
 use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
-use clipboard_win::formats::CF_DIBV5;
+use clipboard_win::formats::{CF_DIB, CF_DIBV5};
 use clipboard_win::raw::set_without_clear;
 use clipboard_win::types::c_uint;
 use clipboard_win::{
@@ -184,8 +184,11 @@ impl Clipboard for ClipboardContext {
 	}
 
 	fn get_image(&self) -> Result<RustImageData> {
-		let has_bmp: bool = clipboard_win::is_format_avail(formats::CF_DIBV5);
-		if has_bmp {
+		let cf_png_format = self.format_map.get(CF_PNG);
+		if cf_png_format.is_some() && clipboard_win::is_format_avail(*cf_png_format.unwrap()) {
+			let image_raw_data = self.get_buffer(CF_PNG)?;
+			RustImageData::from_bytes(&image_raw_data)
+		} else if clipboard_win::is_format_avail(formats::CF_DIBV5) {
 			let res = get_clipboard(formats::RawData(formats::CF_DIBV5));
 			match res {
 				Ok(data) => {
@@ -210,8 +213,7 @@ impl Clipboard for ClipboardContext {
 				Err(e) => Err(format!("Get image error, code = {}", e).into()),
 			}
 		} else {
-			let image_raw_data = self.get_buffer(CF_PNG)?;
-			RustImageData::from_bytes(&image_raw_data)
+			Err("No image data in clipboard".into())
 		}
 	}
 
@@ -320,10 +322,29 @@ impl Clipboard for ClipboardContext {
 	}
 
 	fn set_image(&self, image: RustImageData) -> Result<()> {
+		let _clip = ClipboardWin::new_attempts(10)
+			.map_err(|code| format!("Open clipboard error, code = {}", code));
+		let res = clipboard_win::empty();
+		if let Err(e) = res {
+			return Err(format!("Empty clipboard error, code = {}", e).into());
+		}
+		// chromium source code
+		// @link {https://source.chromium.org/chromium/chromium/src/+/main:ui/base/clipboard/clipboard_win.cc;l=771;drc=2a5aaed0ff3a0895c8551495c2656ed49baf742c;bpv=0;bpt=1}
+		let cf_png_format = self.format_map.get(CF_PNG);
+		if cf_png_format.is_some() {
+			let png = image.to_png()?;
+			let write_png_res = raw::set_without_clear(*cf_png_format.unwrap(), png.get_bytes());
+			if let Err(e) = write_png_res {
+				return Err(format!("set png image error, code = {}", e).into());
+			}
+		}
 		let bmp = image.to_bitmap()?;
 		let bytes = bmp.get_bytes();
 		let no_file_header_bytes = &bytes[14..];
-		let res = set_clipboard(formats::RawData(CF_DIBV5), no_file_header_bytes);
+		// ignore error of write_dib_res
+		// some applications may not support CF_DIBV5 format,so we also set CF_DIB format. e.g. Feishu
+		let _write_dib_res = raw::set_without_clear(CF_DIB, no_file_header_bytes);
+		let res = raw::set_without_clear(CF_DIBV5, no_file_header_bytes);
 		res.map_err(|e| format!("set image error, code = {}", e).into())
 	}
 
