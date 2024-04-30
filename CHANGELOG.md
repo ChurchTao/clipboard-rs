@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.7 (2024-04-30) [released]
+
+-Fix: Bug: Cannot write all content when writing to html on Windows [issues#23](https://github.com/ChurchTao/clipboard-rs/issues/23)
+
 ## v0.1.6 (2024-04-12) [released]
 
 - Fix: Bug: Cannot paste after writing image to clipboard (on Windows) #17 [issues#17](https://github.com/ChurchTao/clipboard-rs/issues/17)
