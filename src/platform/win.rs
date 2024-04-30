@@ -317,7 +317,11 @@ impl Clipboard for ClipboardContext {
 	}
 
 	fn set_html(&self, html: String) -> Result<()> {
-		let res = set_clipboard(self.html_format, &html);
+		let cf_html = plain_html_to_cf_html(&html);
+		let res = set_clipboard(
+			formats::RawData(self.html_format.code()),
+			cf_html.as_bytes(),
+		);
 		res.map_err(|e| format!("set html error, code = {}", e).into())
 	}
 
@@ -369,7 +373,8 @@ impl Clipboard for ClipboardContext {
 					}
 				}
 				ClipboardContent::Html(html) => {
-					let res = set_clipboard(self.html_format, &html);
+					let format_uint_html = self.html_format.code();
+					let res = set_without_clear(format_uint_html, html.as_bytes());
 					if res.is_err() {
 						continue;
 					}
@@ -462,4 +467,77 @@ fn utf8_to_utf16(input: &str) -> Vec<u16> {
 	let mut vec: Vec<u16> = input.encode_utf16().collect();
 	vec.push(0);
 	vec
+}
+
+// https://learn.microsoft.com/en-us/windows/win32/dataxchg/html-clipboard-format
+// The description header includes the clipboard version number and offsets, indicating where the context and the fragment start and end. The description is a list of ASCII text keywords followed by a string and separated by a colon (:).
+// Version: vv version number of the clipboard. Starting version is . As of Windows 10 20H2 this is now .Version:0.9Version:1.0
+// StartHTML: Offset (in bytes) from the beginning of the clipboard to the start of the context, or if no context.-1
+// EndHTML: Offset (in bytes) from the beginning of the clipboard to the end of the context, or if no context.-1
+// StartFragment: Offset (in bytes) from the beginning of the clipboard to the start of the fragment.
+// EndFragment: Offset (in bytes) from the beginning of the clipboard to the end of the fragment.
+// StartSelection: Optional. Offset (in bytes) from the beginning of the clipboard to the start of the selection.
+// EndSelection: Optional. Offset (in bytes) from the beginning of the clipboard to the end of the selection.
+// The and keywords are optional and must both be omitted if you do not want the application to generate this information.StartSelectionEndSelection
+// Future revisions of the clipboard format may extend the header, for example, since the HTML starts at the offset then multiple and pairs could be added later to support noncontiguous selection of fragments.CF_HTMLStartHTMLStartFragmentEndFragment
+// example:
+// html=Version:1.0
+// StartHTML:000000096
+// EndHTML:000000375
+// StartFragment:000000096
+// EndFragment:000000375
+// <html><head><meta http-equiv="content-type" content="text/html; charset=UTF-8"></head><body><div style="background-color:#2b2b2b;color:#a9b7c6;font-family:'JetBrains Mono',monospace;font-size:9.8pt;"><pre><span style="color:#9876aa;">sellChannel</span></pre></div></body></html>
+// cp from https://github.com/Devolutions/IronRDP/blob/37aa6426dba3272f38a2bb46a513144a326854ee/crates/ironrdp-cliprdr-format/src/html.rs#L91
+fn plain_html_to_cf_html(fragment: &str) -> String {
+	const POS_PLACEHOLDER: &str = "0000000000";
+
+	let mut buffer = String::new();
+
+	let mut write_header = |key: &str, value: &str| {
+		let size = key.len() + value.len() + ":\r\n".len();
+		buffer.reserve(size);
+
+		buffer.push_str(key);
+		buffer.push(':');
+		let value_pos = buffer.len();
+		buffer.push_str(value);
+		buffer.push_str("\r\n");
+
+		value_pos
+	};
+
+	write_header("Version", "0.9");
+
+	let start_html_header_value_pos = write_header("StartHTML", POS_PLACEHOLDER);
+	let end_html_header_value_pos = write_header("EndHTML", POS_PLACEHOLDER);
+	let start_fragment_header_value_pos = write_header("StartFragment", POS_PLACEHOLDER);
+	let end_fragment_header_value_pos = write_header("EndFragment", POS_PLACEHOLDER);
+
+	let start_html_pos = buffer.len();
+	buffer.push_str("<html>\r\n<body>\r\n<!--StartFragment-->");
+
+	let start_fragment_pos = buffer.len();
+	buffer.push_str(fragment);
+
+	let end_fragment_pos = buffer.len();
+	buffer.push_str("<!--EndFragment-->\r\n</body>\r\n</html>");
+
+	let end_html_pos = buffer.len();
+
+	let start_html_pos_value = format!("{:0>10}", start_html_pos);
+	let end_html_pos_value = format!("{:0>10}", end_html_pos);
+	let start_fragment_pos_value = format!("{:0>10}", start_fragment_pos);
+	let end_fragment_pos_value = format!("{:0>10}", end_fragment_pos);
+
+	let mut replace_placeholder = |value_begin_idx: usize, header_value: &str| {
+		let value_end_idx = value_begin_idx + POS_PLACEHOLDER.len();
+		buffer.replace_range(value_begin_idx..value_end_idx, header_value);
+	};
+
+	replace_placeholder(start_html_header_value_pos, &start_html_pos_value);
+	replace_placeholder(end_html_header_value_pos, &end_html_pos_value);
+	replace_placeholder(start_fragment_header_value_pos, &start_fragment_pos_value);
+	replace_placeholder(end_fragment_header_value_pos, &end_fragment_pos_value);
+
+	buffer
 }
