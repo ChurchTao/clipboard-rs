@@ -852,7 +852,6 @@ fn file_uri_list_to_clipboard_data(file_list: Vec<String>, atoms: Atoms) -> Vec<
 	let data_text_uri_list = uri_list.join("\r\n");
 	let data_gnome_copied_files = ["copy\n", uri_list.join("\n").as_str()].concat();
 
-
 	vec![
 		ClipboardData {
 			format: atoms.TEXT_MIME_UNKNOWN,
