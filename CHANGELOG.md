@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.8 (2024-07-18) [released]
+
+-Fix: Bug: When read rimeout on Linux there is throw error but not loop [issues#30](https://github.com/ChurchTao/clipboard-rs/issues/30)
+
 ## v0.1.7 (2024-04-30) [released]
 
 -Fix: Bug: Cannot write all content when writing to html on Windows [issues#23](https://github.com/ChurchTao/clipboard-rs/issues/23)

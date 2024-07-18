@@ -324,7 +324,7 @@ impl ClipboardContext {
 			clipboard,
 			*format,
 			atoms.PROPERTY,
-			None,
+			Some(Duration::from_millis(500)),
 			sequence_num,
 		)?;
 
@@ -418,6 +418,7 @@ fn process_server_req(context: &InnerContext) -> Result<()> {
 }
 
 impl Clipboard for ClipboardContext {
+	//https://source.chromium.org/chromium/chromium/src/+/main:ui/base/x/x11_clipboard_helper.cc;l=224;drc=4cc063ac39c4a0d1f6011421b259a9715bb16de1;bpv=0;bpt=1
 	fn available_formats(&self) -> Result<Vec<String>> {
 		let ctx = &self.inner.server;
 		let atoms = ctx.atoms;
@@ -834,22 +835,55 @@ fn file_uri_list_to_clipboard_data(file_list: Vec<String>, atoms: Atoms) -> Vec<
 			}
 		})
 		.collect();
-	let uri_list = uri_list.join("\n");
-	let text_uri_list_data = uri_list.as_bytes().to_vec();
-	let gnome_copied_files_data = ["copy\n".as_bytes(), uri_list.as_bytes()].concat();
+	// 再构造一个 /home/xxx/xxx 这样的路径
+	let uri_str_list: Vec<String> = file_list
+		.iter()
+		.map(|f| {
+			if let Some(stripped) = f.strip_prefix(FILE_PATH_PREFIX) {
+				stripped.to_owned()
+			} else {
+				f.to_owned()
+			}
+		})
+		.collect();
+
+	let data_text_plain = uri_str_list.join("\r\n");
+	let data_text_utf8 = uri_str_list.join("\n");
+	let data_text_uri_list = uri_list.join("\r\n");
+	let data_gnome_copied_files = ["copy\n", uri_list.join("\n").as_str()].concat();
 
 	vec![
 		ClipboardData {
+			format: atoms.TEXT_MIME_UNKNOWN,
+			data: data_text_plain.as_bytes().to_vec(),
+		},
+		ClipboardData {
+			format: atoms.UTF8_MIME_0,
+			data: data_text_plain.as_bytes().to_vec(),
+		},
+		ClipboardData {
+			format: atoms.STRING,
+			data: data_text_utf8.as_bytes().to_vec(),
+		},
+		ClipboardData {
+			format: atoms.TEXT,
+			data: data_text_utf8.as_bytes().to_vec(),
+		},
+		ClipboardData {
+			format: atoms.UTF8_STRING,
+			data: data_text_utf8.as_bytes().to_vec(),
+		},
+		ClipboardData {
 			format: atoms.FILE_LIST,
-			data: text_uri_list_data,
+			data: data_text_uri_list.as_bytes().to_vec(),
 		},
 		ClipboardData {
 			format: atoms.GNOME_COPY_FILES,
-			data: gnome_copied_files_data.clone(),
+			data: data_gnome_copied_files.as_bytes().to_vec(),
 		},
 		ClipboardData {
 			format: atoms.NAUTILUS_FILE_LIST,
-			data: gnome_copied_files_data,
+			data: data_gnome_copied_files.as_bytes().to_vec(),
 		},
 	]
 }
