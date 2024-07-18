@@ -839,8 +839,8 @@ fn file_uri_list_to_clipboard_data(file_list: Vec<String>, atoms: Atoms) -> Vec<
 	let uri_str_list: Vec<String> = file_list
 		.iter()
 		.map(|f| {
-			if f.starts_with(FILE_PATH_PREFIX) {
-				f[FILE_PATH_PREFIX.len()..].to_owned()
+			if let Some(stripped) = f.strip_prefix(FILE_PATH_PREFIX) {
+				stripped.to_owned()
 			} else {
 				f.to_owned()
 			}
