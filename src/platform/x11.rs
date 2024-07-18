@@ -324,7 +324,7 @@ impl ClipboardContext {
 			clipboard,
 			*format,
 			atoms.PROPERTY,
-			None,
+			Some(Duration::from_millis(500)),
 			sequence_num,
 		)?;
 
@@ -834,7 +834,19 @@ fn file_uri_list_to_clipboard_data(file_list: Vec<String>, atoms: Atoms) -> Vec<
 			}
 		})
 		.collect();
+	// 再构造一个 /home/xxx/xxx 这样的路径
+	let uri_str_list: Vec<String> = file_list
+		.iter()
+		.map(|f| {
+			if f.starts_with(FILE_PATH_PREFIX) {
+				f[FILE_PATH_PREFIX.len()..].to_owned()
+			} else {
+				f.to_owned()
+			}
+		})
+		.collect();
 	let uri_list = uri_list.join("\n");
+	let uri_str_list = uri_str_list.join("\n");
 	let text_uri_list_data = uri_list.as_bytes().to_vec();
 	let gnome_copied_files_data = ["copy\n".as_bytes(), uri_list.as_bytes()].concat();
 
@@ -850,6 +862,10 @@ fn file_uri_list_to_clipboard_data(file_list: Vec<String>, atoms: Atoms) -> Vec<
 		ClipboardData {
 			format: atoms.NAUTILUS_FILE_LIST,
 			data: gnome_copied_files_data,
+		},
+		ClipboardData {
+			format: atoms.UTF8_STRING,
+			data: uri_str_list.as_bytes().to_vec(),
 		},
 	]
 }
