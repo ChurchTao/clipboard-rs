@@ -418,6 +418,7 @@ fn process_server_req(context: &InnerContext) -> Result<()> {
 }
 
 impl Clipboard for ClipboardContext {
+	//https://source.chromium.org/chromium/chromium/src/+/main:ui/base/x/x11_clipboard_helper.cc;l=224;drc=4cc063ac39c4a0d1f6011421b259a9715bb16de1;bpv=0;bpt=1
 	fn available_formats(&self) -> Result<Vec<String>> {
 		let ctx = &self.inner.server;
 		let atoms = ctx.atoms;
@@ -824,6 +825,33 @@ fn parse_atom_list(data: &[u8]) -> Vec<Atom> {
 }
 
 fn file_uri_list_to_clipboard_data(file_list: Vec<String>, atoms: Atoms) -> Vec<ClipboardData> {
+	/**
+format="text/plain"
+txt="/home/parallels/clipboard-test/tsconfig.json\r\n/home/parallels/clipboard-test/tsconfig.node.json"
+
+format="text/plain;charset=utf-8"
+txt="/home/parallels/clipboard-test/tsconfig.json\r\n/home/parallels/clipboard-test/tsconfig.node.json"
+
+format="STRING"
+txt="/home/parallels/clipboard-test/tsconfig.json\n/home/parallels/clipboard-test/tsconfig.node.json"
+
+format="TEXT"
+txt="/home/parallels/clipboard-test/tsconfig.json\n/home/parallels/clipboard-test/tsconfig.node.json"
+
+format="COMPOUND_TEXT"
+txt=""
+
+format="UTF8_STRING"
+txt="/home/parallels/clipboard-test/tsconfig.json\n/home/parallels/clipboard-test/tsconfig.node.json"
+
+format="text/uri-list"
+txt="file:///home/parallels/clipboard-test/tsconfig.json\r\nfile:///home/parallels/clipboard-test/tsconfig.node.json\r\n"
+
+format="x-special/gnome-copied-files"
+txt="copy\nfile:///home/parallels/clipboard-test/tsconfig.json\nfile:///home/parallels/clipboard-test/tsconfig.node.json"
+	 */
+	// 按上述格式写入剪贴板
+	 
 	let uri_list: Vec<String> = file_list
 		.iter()
 		.map(|f| {
@@ -845,27 +873,49 @@ fn file_uri_list_to_clipboard_data(file_list: Vec<String>, atoms: Atoms) -> Vec<
 			}
 		})
 		.collect();
-	let uri_list = uri_list.join("\n");
-	let uri_str_list = uri_str_list.join("\n");
-	let text_uri_list_data = uri_list.as_bytes().to_vec();
-	let gnome_copied_files_data = ["copy\n".as_bytes(), uri_list.as_bytes()].concat();
+	// let uri_list = uri_list.join("\n");
+	// let uri_str_list = uri_str_list.join("\n");
+	// let text_uri_list_data = uri_list.as_bytes().to_vec();
+	// let gnome_copied_files_data = ["copy\n".as_bytes(), uri_list.as_bytes()].concat();
+
+	let data_text_plain = uri_str_list.join("\r\n");
+	let data_text_utf8 = uri_str_list.join("\n");
+	let data_text_uri_list = uri_list.join("\r\n");
+	let data_gnome_copied_files = ["copy\n", uri_list.join("\n")].concat();
+
 
 	vec![
 		ClipboardData {
-			format: atoms.FILE_LIST,
-			data: text_uri_list_data,
+			format: atoms.TEXT_MIME_UNKNOWN,
+			data: data_text_plain.as_bytes().to_vec(),
 		},
 		ClipboardData {
-			format: atoms.GNOME_COPY_FILES,
-			data: gnome_copied_files_data.clone(),
+			format: atoms.UTF8_MIME_0,
+			data: data_text_plain.as_bytes().to_vec(),
 		},
 		ClipboardData {
-			format: atoms.NAUTILUS_FILE_LIST,
-			data: gnome_copied_files_data,
+			format: atoms.STRING,
+			data: data_text_utf8.as_bytes().to_vec(),
+		},
+		ClipboardData {
+			format: atoms.TEXT,
+			data: data_text_utf8.as_bytes().to_vec(),
 		},
 		ClipboardData {
 			format: atoms.UTF8_STRING,
-			data: uri_str_list.as_bytes().to_vec(),
+			data: data_text_utf8.as_bytes().to_vec(),
+		},
+		ClipboardData {
+			format: atoms.FILE_LIST,
+			data: data_text_uri_list.as_bytes().to_vec(),
+		},
+		ClipboardData {
+			format: atoms.GNOME_COPY_FILES,
+			data: data_gnome_copied_files.as_bytes().to_vec(),
+		},
+		ClipboardData {
+			format: atoms.NAUTILUS_FILE_LIST,
+			data: data_gnome_copied_files.as_bytes().to_vec(),
 		},
 	]
 }
