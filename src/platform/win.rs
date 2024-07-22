@@ -1,19 +1,21 @@
-use crate::common::{ContentData, Result, RustImage, RustImageData};
-use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
-use clipboard_win::formats::{CF_DIB, CF_DIBV5};
-use clipboard_win::raw::{set_file_list, set_file_list_with, set_string_with, set_without_clear};
-use clipboard_win::types::c_uint;
-use clipboard_win::{
-	formats, get, get_clipboard, options, raw, set_clipboard, Clipboard as ClipboardWin, Monitor,
-	Setter, SysResult,
-};
-use image::codecs::bmp::BmpDecoder;
-use image::{DynamicImage, EncodableLayout};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::time::Duration;
+
+use clipboard_win::formats::{CF_DIB, CF_DIBV5};
+use clipboard_win::raw::{set_file_list_with, set_string_with, set_without_clear};
+use clipboard_win::types::c_uint;
+use clipboard_win::{
+	formats, get, get_clipboard, options, raw, set_clipboard, Clipboard as ClipboardWin, Monitor,
+	SysResult,
+};
+use image::codecs::bmp::BmpDecoder;
+use image::{DynamicImage, EncodableLayout};
+
+use crate::common::{ContentData, Result, RustImage, RustImageData};
+use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
 
 pub struct WatcherShutdown {
 	stop_signal: Sender<()>,
