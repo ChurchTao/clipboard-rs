@@ -1,11 +1,11 @@
 use crate::common::{ContentData, Result, RustImage, RustImageData};
 use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
 use clipboard_win::formats::{CF_DIB, CF_DIBV5};
-use clipboard_win::raw::set_without_clear;
+use clipboard_win::raw::{set_file_list, set_file_list_with, set_string_with, set_without_clear};
 use clipboard_win::types::c_uint;
 use clipboard_win::{
-	formats, get, get_clipboard, raw, set_clipboard, Clipboard as ClipboardWin, Monitor, Setter,
-	SysResult,
+	formats, get, get_clipboard, options, raw, set_clipboard, Clipboard as ClipboardWin, Monitor,
+	Setter, SysResult,
 };
 use image::codecs::bmp::BmpDecoder;
 use image::{DynamicImage, EncodableLayout};
@@ -355,19 +355,21 @@ impl Clipboard for ClipboardContext {
 	fn set_files(&self, files: Vec<String>) -> Result<()> {
 		let _clip = ClipboardWin::new_attempts(10)
 			.map_err(|code| format!("Open clipboard error, code = {}", code));
-		let res = formats::FileList.write_clipboard(&files);
+		let res = set_file_list_with(&files, options::DoClear);
 		res.map_err(|e| format!("set files error, code = {}", e).into())
 	}
 
 	fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
 		let _clip = ClipboardWin::new_attempts(10)
 			.map_err(|code| format!("Open clipboard error, code = {}", code));
+		let res = clipboard_win::empty();
+		if let Err(e) = res {
+			return Err(format!("Empty clipboard error, code = {}", e).into());
+		}
 		for content in contents {
 			match content {
 				ClipboardContent::Text(txt) => {
-					let format_uint = formats::CF_UNICODETEXT;
-					let u16_str = utf8_to_utf16(txt.as_str());
-					let res = set_without_clear(format_uint, u16_str.as_bytes());
+					let res = set_string_with(txt.as_str(), options::NoClear);
 					if res.is_err() {
 						continue;
 					}
@@ -394,7 +396,7 @@ impl Clipboard for ClipboardContext {
 					}
 				}
 				ClipboardContent::Files(file_list) => {
-					let res = formats::FileList.write_clipboard(&file_list);
+					let res = set_file_list_with(&file_list, options::NoClear);
 					if res.is_err() {
 						continue;
 					}

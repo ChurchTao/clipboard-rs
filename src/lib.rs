@@ -48,6 +48,7 @@ pub trait Clipboard: Send {
 
 	fn set_files(&self, files: Vec<String>) -> Result<()>;
 
+	/// set image will clear clipboard
 	fn set(&self, contents: Vec<ClipboardContent>) -> Result<()>;
 }
 
