@@ -12,7 +12,7 @@ use clipboard_win::{
 	SysResult,
 };
 use image::codecs::bmp::BmpDecoder;
-use image::{DynamicImage, EncodableLayout};
+use image::DynamicImage;
 
 use crate::common::{ContentData, Result, RustImage, RustImageData};
 use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
@@ -467,11 +467,11 @@ impl Drop for WatcherShutdown {
 }
 
 /// 将输入的 UTF-8 字符串转换为宽字符（UTF-16）字符串
-fn utf8_to_utf16(input: &str) -> Vec<u16> {
-	let mut vec: Vec<u16> = input.encode_utf16().collect();
-	vec.push(0);
-	vec
-}
+// fn utf8_to_utf16(input: &str) -> Vec<u16> {
+// 	let mut vec: Vec<u16> = input.encode_utf16().collect();
+// 	vec.push(0);
+// 	vec
+// }
 
 // https://learn.microsoft.com/en-us/windows/win32/dataxchg/html-clipboard-format
 // The description header includes the clipboard version number and offsets, indicating where the context and the fragment start and end. The description is a list of ASCII text keywords followed by a string and separated by a colon (:).
