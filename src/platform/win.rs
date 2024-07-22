@@ -1,19 +1,21 @@
-use crate::common::{ContentData, Result, RustImage, RustImageData};
-use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
-use clipboard_win::formats::{CF_DIB, CF_DIBV5};
-use clipboard_win::raw::set_without_clear;
-use clipboard_win::types::c_uint;
-use clipboard_win::{
-	formats, get, get_clipboard, raw, set_clipboard, Clipboard as ClipboardWin, Monitor, Setter,
-	SysResult,
-};
-use image::codecs::bmp::BmpDecoder;
-use image::{DynamicImage, EncodableLayout};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::time::Duration;
+
+use clipboard_win::formats::{CF_DIB, CF_DIBV5};
+use clipboard_win::raw::{set_file_list_with, set_string_with, set_without_clear};
+use clipboard_win::types::c_uint;
+use clipboard_win::{
+	formats, get, get_clipboard, options, raw, set_clipboard, Clipboard as ClipboardWin, Monitor,
+	SysResult,
+};
+use image::codecs::bmp::BmpDecoder;
+use image::DynamicImage;
+
+use crate::common::{ContentData, Result, RustImage, RustImageData};
+use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
 
 pub struct WatcherShutdown {
 	stop_signal: Sender<()>,
@@ -355,19 +357,21 @@ impl Clipboard for ClipboardContext {
 	fn set_files(&self, files: Vec<String>) -> Result<()> {
 		let _clip = ClipboardWin::new_attempts(10)
 			.map_err(|code| format!("Open clipboard error, code = {}", code));
-		let res = formats::FileList.write_clipboard(&files);
+		let res = set_file_list_with(&files, options::DoClear);
 		res.map_err(|e| format!("set files error, code = {}", e).into())
 	}
 
 	fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
 		let _clip = ClipboardWin::new_attempts(10)
 			.map_err(|code| format!("Open clipboard error, code = {}", code));
+		let res = clipboard_win::empty();
+		if let Err(e) = res {
+			return Err(format!("Empty clipboard error, code = {}", e).into());
+		}
 		for content in contents {
 			match content {
 				ClipboardContent::Text(txt) => {
-					let format_uint = formats::CF_UNICODETEXT;
-					let u16_str = utf8_to_utf16(txt.as_str());
-					let res = set_without_clear(format_uint, u16_str.as_bytes());
+					let res = set_string_with(txt.as_str(), options::NoClear);
 					if res.is_err() {
 						continue;
 					}
@@ -394,7 +398,7 @@ impl Clipboard for ClipboardContext {
 					}
 				}
 				ClipboardContent::Files(file_list) => {
-					let res = formats::FileList.write_clipboard(&file_list);
+					let res = set_file_list_with(&file_list, options::NoClear);
 					if res.is_err() {
 						continue;
 					}
@@ -463,11 +467,11 @@ impl Drop for WatcherShutdown {
 }
 
 /// 将输入的 UTF-8 字符串转换为宽字符（UTF-16）字符串
-fn utf8_to_utf16(input: &str) -> Vec<u16> {
-	let mut vec: Vec<u16> = input.encode_utf16().collect();
-	vec.push(0);
-	vec
-}
+// fn utf8_to_utf16(input: &str) -> Vec<u16> {
+// 	let mut vec: Vec<u16> = input.encode_utf16().collect();
+// 	vec.push(0);
+// 	vec
+// }
 
 // https://learn.microsoft.com/en-us/windows/win32/dataxchg/html-clipboard-format
 // The description header includes the clipboard version number and offsets, indicating where the context and the fragment start and end. The description is a list of ASCII text keywords followed by a string and separated by a colon (:).
