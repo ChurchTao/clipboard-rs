@@ -23,7 +23,7 @@ clipboard-rs 是一个用 Rust 语言编写的跨平台库，用于获取和设�
 
 ```toml
 [dependencies]
-clipboard-rs = "0.1.8"
+clipboard-rs = "0.1.10"
 ```
 
 ## [更新日志](CHANGELOG.md)
@@ -174,6 +174,12 @@ fn main() {
 
 - API 设计灵感来自于 [electron](https://www.electronjs.org/zh/docs/latest/api/clipboard)
 - Linux 部分项目代码参考自 [x11-clipboard](https://github.com/quininer/x11-clipboard/tree/master)
+
+## 联系我
+
+邮箱: `swkzymlyy@gmail.com`
+
+微信号: `uniq_idx_church_lynn`
 
 ## 许可证
 

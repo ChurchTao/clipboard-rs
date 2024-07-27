@@ -31,7 +31,7 @@ Add the following content to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-clipboard-rs = "0.1.8"
+clipboard-rs = "0.1.10"
 ```
 
 ## [CHANGELOG](CHANGELOG.md)
@@ -181,6 +181,12 @@ You are welcome to submit PRs and issues and contribute your code or ideas to th
 
 - API design is inspired by [electron](https://www.electronjs.org/zh/docs/latest/api/clipboard)
 - Linux part of the project code is referenced from [x11-clipboard](https://github.com/quininer/x11-clipboard/tree/master)
+
+## Contract
+
+if you have any questions, you can contact me by email: `swkzymlyy@gmail.com`
+
+Chinese users can also contact me by wechatNo: `uniq_idx_church_lynn`
 
 ## License
 
