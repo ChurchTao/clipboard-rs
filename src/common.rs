@@ -1,5 +1,5 @@
 use image::imageops::FilterType;
-use image::{DynamicImage, GenericImageView, ImageFormat};
+use image::{DynamicImage, GenericImageView, ImageFormat, RgbaImage};
 use std::error::Error;
 use std::io::Cursor;
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
@@ -134,6 +134,10 @@ pub trait RustImage: Sized {
 	fn to_bitmap(&self) -> Result<RustImageBuffer>;
 
 	fn save_to_path(&self, path: &str) -> Result<()>;
+
+	fn get_dynamic_image(&self) -> Result<DynamicImage>;
+
+	fn to_rgba8(&self) -> Result<RgbaImage>;
 }
 
 macro_rules! image_to_format {
@@ -237,6 +241,20 @@ impl RustImage for RustImageData {
 				image.save(path)?;
 				Ok(())
 			}
+			None => Err("image is empty".into()),
+		}
+	}
+
+	fn get_dynamic_image(&self) -> Result<DynamicImage> {
+		match &self.data {
+			Some(image) => Ok(image.clone()),
+			None => Err("image is empty".into()),
+		}
+	}
+
+	fn to_rgba8(&self) -> Result<RgbaImage> {
+		match &self.data {
+			Some(image) => Ok(image.to_rgba8()),
 			None => Err("image is empty".into()),
 		}
 	}
