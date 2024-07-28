@@ -4,15 +4,14 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 
-use clipboard_win::formats::{CF_DIB, CF_DIBV5};
-use clipboard_win::raw::{set_file_list_with, set_string_with, set_without_clear};
+use clipboard_win::raw::{set_bitmap_with, set_file_list_with, set_string_with, set_without_clear};
 use clipboard_win::types::c_uint;
 use clipboard_win::{
 	formats, get, get_clipboard, options, raw, set_clipboard, Clipboard as ClipboardWin, Monitor,
 	SysResult,
 };
-use image::codecs::bmp::{BmpDecoder, BmpEncoder};
-use image::{DynamicImage, ExtendedColorType, ImageEncoder};
+use image::codecs::bmp::BmpDecoder;
+use image::DynamicImage;
 
 use crate::common::{ContentData, Result, RustImage, RustImageData};
 use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
@@ -344,21 +343,10 @@ impl Clipboard for ClipboardContext {
 				return Err(format!("set png image error, code = {}", e).into());
 			}
 		}
-		// 这里需要强制转化为rgba8,这样才能让bmp编码器正常工作
-		let (width, height) = image.get_size();
-		let rgba8 = image
-			.to_rgba8()
-			.map_err(|e| format!("to rgba8 error, code = {}", e))?;
-		let mut cf_dib_v5: Vec<u8> = Vec::new();
-		let encoder = BmpEncoder::new(&mut cf_dib_v5);
-		encoder
-			.write_image(rgba8.as_raw(), width, height, ExtendedColorType::Rgba8)
-			.map_err(|e| format!("write image error, code = {}", e))?;
-		let no_file_header_bytes = &cf_dib_v5[14..];
-		// ignore error of write_dib_res
-		// some applications may not support CF_DIBV5 format,so we also set CF_DIB format. e.g. Feishu
-		let _write_dib_res = set_without_clear(CF_DIB, no_file_header_bytes);
-		let res = set_without_clear(CF_DIBV5, no_file_header_bytes);
+		let bmp = image
+			.to_bitmap()
+			.map_err(|e| format!("to bitmap error, code = {}", e))?;
+		let res = set_bitmap_with(bmp.get_bytes(), options::NoClear);
 		res.map_err(|e| format!("set image error, code = {}", e).into())
 	}
 
