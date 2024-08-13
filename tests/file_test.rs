@@ -27,7 +27,7 @@ fn test_file() {
 	println!("{:?}", types);
 
 	let has = ctx.has(ContentFormat::Files);
-	assert_eq!(has, true);
+	assert!(has);
 
 	let files = ctx.get_files().unwrap();
 	assert_eq!(files.len(), 2);
@@ -39,7 +39,7 @@ fn test_file() {
 	ctx.clear().unwrap();
 
 	let has = ctx.has(ContentFormat::Files);
-	assert_eq!(has, false);
+	assert!(!has);
 }
 
 fn get_files() -> Vec<String> {

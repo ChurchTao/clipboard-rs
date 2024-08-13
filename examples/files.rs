@@ -17,6 +17,6 @@ fn main() {
 	let has = ctx.has(ContentFormat::Files);
 	println!("has_files={}", has);
 
-	let files = ctx.get_files().unwrap_or(vec![]);
+	let files = ctx.get_files().unwrap_or_default();
 	println!("{:?}", files);
 }

@@ -104,7 +104,7 @@ impl ClipboardContext {
 	fn plain(&self, r#type: &NSPasteboardType) -> Result<String> {
 		autoreleasepool(|_| {
 			let contents = unsafe { self.pasteboard.pasteboardItems() }
-				.ok_or_else(|| "NSPasteboard#pasteboardItems errored")?;
+				.ok_or("NSPasteboard#pasteboardItems errored")?;
 			for item in contents {
 				if let Some(string) = unsafe { item.stringForType(r#type) } {
 					return Ok(string.to_string());
@@ -150,7 +150,7 @@ impl ClipboardContext {
 								NSData::initWithBytes_length(
 									NSData::alloc(),
 									bytes.as_ptr() as *mut c_void,
-									bytes.len() as usize,
+									bytes.len(),
 								)
 							};
 							let item = NSPasteboardItem::new();
@@ -169,7 +169,7 @@ impl ClipboardContext {
 							NSData::initWithBytes_length(
 								NSData::alloc(),
 								buffer.as_ptr() as *mut c_void,
-								buffer.len() as usize,
+								buffer.len(),
 							)
 						};
 						self.pasteboard.declareTypes_owner(
@@ -199,8 +199,7 @@ unsafe impl Sync for ClipboardContext {}
 
 impl Clipboard for ClipboardContext {
 	fn available_formats(&self) -> Result<Vec<String>> {
-		let types =
-			unsafe { self.pasteboard.types() }.ok_or_else(|| "NSPasteboard#types errored")?;
+		let types = unsafe { self.pasteboard.types() }.ok_or("NSPasteboard#types errored")?;
 		let res = types.iter().map(|t| t.to_string()).collect();
 		Ok(res)
 	}
@@ -306,7 +305,7 @@ impl Clipboard for ClipboardContext {
 	fn get(&self, formats: &[ContentFormat]) -> Result<Vec<ClipboardContent>> {
 		autoreleasepool(|_| {
 			let contents = unsafe { self.pasteboard.pasteboardItems() }
-				.ok_or_else(|| "NSPasteboard#pasteboardItems errored")?;
+				.ok_or("NSPasteboard#pasteboardItems errored")?;
 			let mut results = Vec::new();
 			for format in formats {
 				for item in contents.iter() {
@@ -334,13 +333,12 @@ impl Clipboard for ClipboardContext {
 								break;
 							}
 						}
-						ContentFormat::Image => match self.get_image() {
-							Ok(image) => {
+						ContentFormat::Image => {
+							if let Ok(image) = self.get_image() {
 								results.push(ClipboardContent::Image(image));
 								break;
 							}
-							Err(_) => {}
-						},
+						}
 						ContentFormat::Files => {
 							if let Some(string) =
 								unsafe { item.stringForType(&NSString::from_str(NS_FILES)) }
