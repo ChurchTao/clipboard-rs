@@ -1,4 +1,6 @@
-use clipboard_rs::{Clipboard, ClipboardContext, ContentFormat};
+use clipboard_rs::{
+	common::ContentData, Clipboard, ClipboardContent, ClipboardContext, ContentFormat,
+};
 
 #[cfg(target_os = "macos")]
 const TMP_PATH: &str = "/tmp/";
@@ -19,9 +21,9 @@ const TMP_PATH: &str = "/tmp/";
 fn test_file() {
 	let ctx = ClipboardContext::new().unwrap();
 
-	let files = get_files();
+	let file_list = get_files();
 
-	ctx.set_files(files).unwrap();
+	ctx.set_files(file_list.clone()).unwrap();
 
 	let types = ctx.available_formats().unwrap();
 	println!("{:?}", types);
@@ -40,6 +42,40 @@ fn test_file() {
 
 	let has = ctx.has(ContentFormat::Files);
 	assert!(!has);
+
+	ctx.set(vec![
+		ClipboardContent::Text(file_list.clone().join("\n").to_string()),
+		ClipboardContent::Files(file_list.clone()),
+	])
+	.unwrap();
+
+	let has = ctx.has(ContentFormat::Files);
+	assert!(has);
+
+	let types = ctx.available_formats().unwrap();
+	println!("{:?}", types);
+
+	let contents = ctx
+		.get(&[ContentFormat::Text, ContentFormat::Files])
+		.unwrap();
+
+	assert_eq!(contents.len(), 2);
+
+	for c in contents {
+		match c {
+			ClipboardContent::Text(data) => {
+				assert_eq!(data, file_list.clone().join("\n"));
+				println!("ClipboardContent::Text = {}", data);
+			}
+			ClipboardContent::Files(files) => {
+				assert_eq!(files.len(), 2);
+				for file in files {
+					println!("ClipboardContent::Files = {:?}", file);
+				}
+			}
+			_ => panic!("unexpected format"),
+		}
+	}
 }
 
 fn get_files() -> Vec<String> {

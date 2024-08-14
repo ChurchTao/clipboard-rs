@@ -18,7 +18,7 @@ impl ClipboardHandler for Manager {
 	fn on_clipboard_change(&mut self) {
 		println!(
 			"on_clipboard_change, txt = {}",
-			self.ctx.get_text().unwrap()
+			self.ctx.get_text().unwrap_or("".to_string())
 		);
 	}
 }
@@ -28,7 +28,8 @@ fn main() {
 
 	let mut watcher = ClipboardWatcherContext::new().unwrap();
 
-	let watcher_shutdown = watcher.add_handler(manager).get_shutdown_channel();
+	let watcher_shutdown: clipboard_rs::WatcherShutdown =
+		watcher.add_handler(manager).get_shutdown_channel();
 
 	thread::spawn(move || {
 		thread::sleep(Duration::from_secs(5));

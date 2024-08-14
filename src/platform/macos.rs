@@ -1,5 +1,6 @@
 use crate::common::{Result, RustImage, RustImageData};
 use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
+use objc2::rc::Retained;
 use objc2::{
 	rc::{autoreleasepool, Id},
 	runtime::ProtocolObject,
@@ -15,8 +16,6 @@ use std::ffi::c_void;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 use std::vec;
-
-const NS_FILES: &str = "public.file-url";
 
 pub struct ClipboardContext {
 	pasteboard: Id<NSPasteboard>,
@@ -114,6 +113,16 @@ impl ClipboardContext {
 		})
 	}
 
+	fn set_files(&self, files: &[String]) -> Result<()> {
+		let ns_string_arr =
+			NSArray::from_vec(files.iter().map(|f| NSString::from_str(f)).collect());
+		unsafe {
+			self.pasteboard
+				.setPropertyList_forType(&ns_string_arr, NSFilenamesPboardType)
+		};
+		Ok(())
+	}
+
 	// learn from https://github.com/zed-industries/zed/blob/79c1003b344ee513cf97ee8313c38c7c3f02c916/crates/gpui/src/platform/mac/platform.rs#L793
 	fn write_to_clipboard(&self, data: &[ClipboardContent], with_clear: bool) -> Result<()> {
 		if with_clear {
@@ -144,7 +153,6 @@ impl ClipboardContext {
 					ClipboardContent::Image(image) => {
 						let png_img = image.to_png();
 						if let Ok(png_buffer) = png_img {
-							// dataWithBytes_length_(nil, string.as_ptr() as *const c_void, string.len() as u64)
 							let bytes = png_buffer.get_bytes();
 							let ns_data = {
 								NSData::initWithBytes_length(
@@ -155,14 +163,11 @@ impl ClipboardContext {
 							};
 							let item = NSPasteboardItem::new();
 							item.setData_forType(&ns_data, NSPasteboardTypePNG);
+							write_objects.push(ProtocolObject::from_id(item));
 						};
 					}
 					ClipboardContent::Files(files) => {
-						let ns_string_arr = NSArray::from_vec(
-							files.iter().map(|f| NSString::from_str(f)).collect(),
-						);
-						let item = NSPasteboardItem::new();
-						item.setPropertyList_forType(&ns_string_arr, NSFilenamesPboardType);
+						let _ = self.set_files(files);
 					}
 					ClipboardContent::Other(format, buffer) => {
 						let ns_data = {
@@ -178,6 +183,7 @@ impl ClipboardContext {
 						);
 						let item = NSPasteboardItem::new();
 						item.setData_forType(&ns_data, &NSString::from_str(format));
+						write_objects.push(ProtocolObject::from_id(item));
 					}
 				}
 			}
@@ -231,8 +237,7 @@ impl Clipboard for ClipboardContext {
 				self.pasteboard.availableTypeFromArray(&types).is_some()
 			},
 			ContentFormat::Files => unsafe {
-				// Currently only judge whether there is a public.file-url format
-				let types = NSArray::from_vec(vec![NSString::from_str(NS_FILES)]);
+				let types = NSArray::arrayWithObject(NSFilenamesPboardType);
 				self.pasteboard.availableTypeFromArray(&types).is_some()
 			},
 			ContentFormat::Other(format) => unsafe {
@@ -287,13 +292,14 @@ impl Clipboard for ClipboardContext {
 
 	fn get_files(&self) -> Result<Vec<String>> {
 		let mut res = vec![];
-		let ns_array = unsafe { self.pasteboard.pasteboardItems() };
-		if let Some(array) = ns_array {
-			for item in array.iter() {
-				let ns_string = unsafe { item.stringForType(&NSString::from_str(NS_FILES)) };
-				if let Some(string) = ns_string {
-					res.push(string.to_string());
-				}
+		let ns_array = unsafe { self.pasteboard.propertyListForType(NSFilenamesPboardType) };
+		unsafe {
+			if let Some(array) = ns_array {
+				// cast to NSArray<NSString>
+				let array: Retained<NSArray<NSString>> = Retained::cast(array);
+				array.iter().for_each(|item| {
+					res.push(item.to_string());
+				});
 			}
 		}
 		if res.is_empty() {
@@ -340,21 +346,8 @@ impl Clipboard for ClipboardContext {
 							}
 						}
 						ContentFormat::Files => {
-							if let Some(string) =
-								unsafe { item.stringForType(&NSString::from_str(NS_FILES)) }
-							{
-								// 文件路径可能有多个，所以若果在results中没有ClipboardContent::Files时新建一个，如果添加过了，直接继续往里加
-								let mut found = false;
-								for content in &mut results {
-									if let ClipboardContent::Files(files) = content {
-										files.push(string.to_string());
-										found = true;
-										break;
-									}
-								}
-								if !found {
-									results.push(ClipboardContent::Files(vec![string.to_string()]));
-								}
+							if let Ok(files) = self.get_files() {
+								results.push(ClipboardContent::Files(files));
 								break;
 							}
 						}
@@ -396,11 +389,12 @@ impl Clipboard for ClipboardContext {
 		self.write_to_clipboard(&[ClipboardContent::Image(image)], true)
 	}
 
-	fn set_files(&self, file: Vec<String>) -> Result<()> {
-		if file.is_empty() {
+	fn set_files(&self, files: Vec<String>) -> Result<()> {
+		if files.is_empty() {
 			return Err("file list is empty".into());
 		}
-		self.write_to_clipboard(&[ClipboardContent::Files(file)], true)
+		let _ = self.clear();
+		self.set_files(&files)
 	}
 
 	fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
