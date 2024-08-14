@@ -1,6 +1,4 @@
-use clipboard_rs::{
-	common::ContentData, Clipboard, ClipboardContent, ClipboardContext, ContentFormat,
-};
+use clipboard_rs::{Clipboard, ClipboardContent, ClipboardContext, ContentFormat};
 
 #[cfg(target_os = "macos")]
 const TMP_PATH: &str = "/tmp/";
