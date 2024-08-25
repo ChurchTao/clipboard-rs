@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.2.0 (2024-08-25) [released]
+
+### zh:
+
+- macOS 性能优化，增强 test 类，替换使用 objc2
+- 修复 windows 读取 rtf 可能失败的情况
+- 修复读取 html 少<的情况，【因为 wps 写入的 StartFragment 有问题】
+
+### en:
+
+- macOS performance optimization, enhanced test class, replaced with objc2
+- Fixed the case where reading rtf on windows may fail
+- Fixed the case of reading html less than <, [because the StartFragment written by wps is problematic]
+
 ## v0.1.9 (2024-07-22) [released]
 
 - Fix: Bug: `set` on windows without clear [issues#32](https://github.com/ChurchTao/clipboard-rs/issues/32)
