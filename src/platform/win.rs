@@ -4,6 +4,8 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 
+use crate::common::{ContentData, Result, RustImage, RustImageData};
+use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
 use clipboard_win::raw::{set_bitmap_with, set_file_list_with, set_string_with, set_without_clear};
 use clipboard_win::types::c_uint;
 use clipboard_win::{
@@ -12,9 +14,6 @@ use clipboard_win::{
 };
 use image::codecs::bmp::BmpDecoder;
 use image::DynamicImage;
-
-use crate::common::{ContentData, Result, RustImage, RustImageData};
-use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
 
 pub struct WatcherShutdown {
 	stop_signal: Sender<()>,
@@ -173,14 +172,23 @@ impl Clipboard for ClipboardContext {
 
 	fn get_rich_text(&self) -> Result<String> {
 		let rtf_raw_data = self.get_buffer(CF_RTF)?;
-		Ok(String::from_utf8(rtf_raw_data)?)
+		Ok(String::from_utf8_lossy(&rtf_raw_data).to_string())
 	}
 
 	fn get_html(&self) -> Result<String> {
-		let res: SysResult<String> = get_clipboard(self.html_format);
-		match res {
-			Ok(html) => Ok(html),
-			Err(e) => Err(format!("Get html error, code = {}", e).into()),
+		let buffer = get_clipboard(formats::RawData(self.html_format.code()));
+		match buffer {
+			Ok(data) => {
+				let html_res = String::from_utf8(data);
+				if let Ok(html_full_str) = html_res {
+					let html = extract_html_from_clipboard_data(html_full_str.as_str());
+					if let Ok(html) = html {
+						return Ok(html);
+					}
+				}
+				Err("Get html error".into())
+			}
+			Err(e) => Err(format!("Get buffer error, code = {}", e).into()),
 		}
 	}
 
@@ -246,17 +254,23 @@ impl Clipboard for ClipboardContext {
 					let buffer = get(formats::RawData(format_uint));
 					match buffer {
 						Ok(buffer) => {
-							let rtf = String::from_utf8(buffer)?;
-							res.push(ClipboardContent::Rtf(rtf));
+							let rtf = String::from_utf8_lossy(&buffer);
+							res.push(ClipboardContent::Rtf(rtf.to_string()));
 						}
 						Err(_) => continue,
 					}
 				}
 				ContentFormat::Html => {
-					let html_res: SysResult<String> = get(self.html_format);
-					match html_res {
+					let html_buffer = get(formats::RawData(self.html_format.code()));
+					match html_buffer {
 						Ok(html) => {
-							res.push(ClipboardContent::Html(html));
+							let html_res = String::from_utf8(html);
+							if let Ok(html_full_str) = html_res {
+								let html = extract_html_from_clipboard_data(html_full_str.as_str());
+								if let Ok(html) = html {
+									res.push(ClipboardContent::Html(html));
+								}
+							}
 						}
 						Err(_) => continue,
 					}
@@ -514,13 +528,17 @@ fn plain_html_to_cf_html(fragment: &str) -> String {
 	let end_fragment_header_value_pos = write_header("EndFragment", POS_PLACEHOLDER);
 
 	let start_html_pos = buffer.len();
-	buffer.push_str("<html>\r\n<body>\r\n<!--StartFragment-->");
+	if !fragment.starts_with("<html>") {
+		buffer.push_str("<html>\r\n<body>\r\n<!--StartFragment-->");
+	}
 
 	let start_fragment_pos = buffer.len();
 	buffer.push_str(fragment);
 
 	let end_fragment_pos = buffer.len();
-	buffer.push_str("<!--EndFragment-->\r\n</body>\r\n</html>");
+	if !fragment.ends_with("</html>") {
+		buffer.push_str("<!--EndFragment-->\r\n</body>\r\n</html>");
+	}
 
 	let end_html_pos = buffer.len();
 
@@ -540,4 +558,53 @@ fn plain_html_to_cf_html(fragment: &str) -> String {
 	replace_placeholder(end_fragment_header_value_pos, &end_fragment_pos_value);
 
 	buffer
+}
+
+const SEP: char = ':';
+const START_HTML: &str = "StartHTML";
+const END_HTML: &str = "EndHTML";
+
+fn extract_html_from_clipboard_data(data: &str) -> Result<String> {
+	let mut start_idx = 0usize;
+	let mut end_idx = data.len();
+	for line in data.lines() {
+		let mut split = line.split(SEP);
+		let key = match split.next() {
+			Some(key) => key,
+			None => break,
+		};
+		let value = match split.next() {
+			Some(value) => value,
+			//Reached HTML
+			None => break,
+		};
+		match key {
+			START_HTML => match value.trim_start_matches('0').parse() {
+				Ok(value) => {
+					start_idx = value;
+					continue;
+				}
+				//Should not really happen
+				Err(_) => break,
+			},
+			END_HTML => match value.trim_start_matches('0').parse() {
+				Ok(value) => {
+					end_idx = value;
+					continue;
+				}
+				//Should not really happen
+				Err(_) => break,
+			},
+			_ => continue,
+		}
+	}
+	//Make sure HTML writer didn't screw up offsets of fragment
+	let size = match end_idx.checked_sub(start_idx) {
+		Some(size) => size,
+		None => return Err("Invalid HTML offsets".into()),
+	};
+	if size > data.len() {
+		return Err("Invalid HTML offsets".into());
+	};
+	Ok(data[start_idx..end_idx].to_string())
 }
