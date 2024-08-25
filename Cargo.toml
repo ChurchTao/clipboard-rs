@@ -1,6 +1,6 @@
 [package]
 name = "clipboard-rs"
-version = "0.1.11"
+version = "0.2.0"
 authors = ["ChurchTao <swkzymlyy@gmail.com>"]
 description = "Cross-platform clipboard API (text | image | rich text | html | files | monitoring changes) | 跨平台剪贴板 API(文本|图片|富文本|html|文件|监听变化) Windows,MacOS,Linux"
 repository = "https://github.com/ChurchTao/clipboard-rs"
