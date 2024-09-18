@@ -173,6 +173,22 @@ fn main() {
 
 ```
 
+## X11 - Clipboard Read Timeout
+
+By default, in X11 clipboard-rs implements a read timeout of 500 ms.  You can override or disable this timeout by creating **ClipboardContext** using `new_with_options`:
+
+```rust
+#[cfg(unix)]
+fn setup_clipboard() -> ClipboardContext {
+	ClipboardContext::new_with_options(ClipboardContextX11Options { read_timeout: None }).unwrap()
+}
+
+#[cfg(not(unix))]
+fn setup_clipboard(ctx: &mut ClipboardContext) -> ClipboardContext{
+	ClipboardContext::new().unwrap()
+}
+```
+
 ## Contributing
 
 You are welcome to submit PRs and issues and contribute your code or ideas to the project. Due to my limited level, the library may also have bugs. You are welcome to point them out and I will modify them as soon as possible.
