@@ -17,13 +17,13 @@ const TMP_PATH: &str = "C:\\Windows\\Temp\\";
 ))]
 const TMP_PATH: &str = "/tmp/";
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn setup_clipboard() -> ClipboardContext {
 	ClipboardContext::new_with_options(ClipboardContextX11Options { read_timeout: None }).unwrap()
 }
 
-#[cfg(not(unix))]
-fn setup_clipboard(ctx: &mut ClipboardContext) -> ClipboardContext {
+#[cfg(not(target_os = "linux"))]
+fn setup_clipboard() -> ClipboardContext {
 	ClipboardContext::new().unwrap()
 }
 
