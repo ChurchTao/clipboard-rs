@@ -2,11 +2,8 @@ pub mod common;
 mod platform;
 pub use common::{ClipboardContent, ClipboardHandler, ContentFormat, Result, RustImageData};
 pub use image::imageops::FilterType;
-#[cfg(unix)]
-pub use platform::{
-	ClipboardContext, ClipboardContextX11Options, ClipboardWatcherContext, WatcherShutdown,
-};
-#[cfg(not(unix))]
+#[cfg(target_os = "linux")]
+pub use platform::ClipboardContextX11Options;
 pub use platform::{ClipboardContext, ClipboardWatcherContext, WatcherShutdown};
 
 pub trait Clipboard: Send {
