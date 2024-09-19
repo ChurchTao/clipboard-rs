@@ -59,7 +59,6 @@ x11rb::atom_manager! {
 
 pub const DEFAULT_READ_TIMEOUT: u64 = 500;
 
-
 // zh: 用于创建 X11 剪贴板上下文的选项
 // en: Options for creating an X11 clipboard context
 pub struct ClipboardContextX11Options {
@@ -306,7 +305,7 @@ impl InnerContext {
 impl ClipboardContext {
 	pub fn new() -> Result<Self> {
 		Self::new_with_options(ClipboardContextX11Options {
-			read_timeout: Some(Duration::from_millis(DEFAULT_READ_TIMEOUT))
+			read_timeout: Some(Duration::from_millis(DEFAULT_READ_TIMEOUT)),
 		})
 	}
 
@@ -323,10 +322,10 @@ impl ClipboardContext {
 			}
 		});
 
-		Ok(Self { 
+		Ok(Self {
 			inner: ctx_arc,
-			read_timeout: options.read_timeout
-		 })
+			read_timeout: options.read_timeout,
+		})
 	}
 
 	fn read(&self, format: &Atom) -> Result<Vec<u8>> {

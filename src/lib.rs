@@ -3,7 +3,9 @@ mod platform;
 pub use common::{ClipboardContent, ClipboardHandler, ContentFormat, Result, RustImageData};
 pub use image::imageops::FilterType;
 #[cfg(unix)]
-pub use platform::{ClipboardContext, ClipboardWatcherContext, WatcherShutdown, ClipboardContextX11Options};
+pub use platform::{
+	ClipboardContext, ClipboardContextX11Options, ClipboardWatcherContext, WatcherShutdown,
+};
 #[cfg(not(unix))]
 pub use platform::{ClipboardContext, ClipboardWatcherContext, WatcherShutdown};
 

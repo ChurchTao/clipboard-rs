@@ -1,6 +1,6 @@
-use clipboard_rs::{common::RustImage, Clipboard, ClipboardContext};
 #[cfg(target_os = "linux")]
 use clipboard_rs::ClipboardContextX11Options;
+use clipboard_rs::{common::RustImage, Clipboard, ClipboardContext};
 
 #[cfg(target_os = "macos")]
 const TMP_PATH: &str = "/tmp/";
@@ -23,12 +23,11 @@ fn setup_clipboard() -> ClipboardContext {
 }
 
 #[cfg(not(unix))]
-fn setup_clipboard(ctx: &mut ClipboardContext) -> ClipboardContext{
+fn setup_clipboard(ctx: &mut ClipboardContext) -> ClipboardContext {
 	ClipboardContext::new().unwrap()
 }
 
 fn main() {
-	
 	let ctx = setup_clipboard();
 
 	let types = ctx.available_formats().unwrap();
