@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.2.1 (2024-08-26) [released]
+
+### zh:
+
+- 增加 X11 启动参数，自定义读取的超时时间 [issues#45](https://github.com/ChurchTao/clipboard-rs/issues/45)
+
+### en:
+
+- Add X11 startup parameters to customize the timeout for reading [issues#45](https://github.com/ChurchTao/clipboard-rs/issues/45)
+
 ## v0.2.0 (2024-08-25) [released]
 
 ### zh:

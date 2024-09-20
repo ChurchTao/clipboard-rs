@@ -31,7 +31,7 @@ Add the following content to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-clipboard-rs = "0.2.0"
+clipboard-rs = "0.2.1"
 ```
 
 ## [CHANGELOG](CHANGELOG.md)
@@ -175,7 +175,7 @@ fn main() {
 
 ## X11 - Clipboard Read Timeout
 
-By default, in X11 clipboard-rs implements a read timeout of 500 ms.  You can override or disable this timeout by creating **ClipboardContext** using `new_with_options`:
+By default, in X11 clipboard-rs implements a read timeout of 500 ms. You can override or disable this timeout by creating **ClipboardContext** using `new_with_options`:
 
 ```rust
 #[cfg(unix)]
