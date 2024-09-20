@@ -2,7 +2,10 @@ pub mod common;
 mod platform;
 pub use common::{ClipboardContent, ClipboardHandler, ContentFormat, Result, RustImageData};
 pub use image::imageops::FilterType;
+#[cfg(target_os = "linux")]
+pub use platform::ClipboardContextX11Options;
 pub use platform::{ClipboardContext, ClipboardWatcherContext, WatcherShutdown};
+
 pub trait Clipboard: Send {
 	/// zh: 获得剪切板当前内容的所有格式
 	/// en: Get all formats of the current content in the clipboard

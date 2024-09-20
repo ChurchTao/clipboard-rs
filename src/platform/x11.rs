@@ -57,9 +57,20 @@ x11rb::atom_manager! {
 	}
 }
 
+pub const DEFAULT_READ_TIMEOUT: u64 = 500;
+
+// zh: 用于创建 X11 剪贴板上下文的选项
+// en: Options for creating an X11 clipboard context
+pub struct ClipboardContextX11Options {
+	// zh: 剪贴板读取操作超时
+	// en: Timeout for clipboard read operations
+	pub read_timeout: Option<Duration>,
+}
+
 const FILE_PATH_PREFIX: &str = "file://";
 pub struct ClipboardContext {
 	inner: Arc<InnerContext>,
+	read_timeout: Option<Duration>,
 }
 
 struct ClipboardData {
@@ -293,6 +304,12 @@ impl InnerContext {
 
 impl ClipboardContext {
 	pub fn new() -> Result<Self> {
+		Self::new_with_options(ClipboardContextX11Options {
+			read_timeout: Some(Duration::from_millis(DEFAULT_READ_TIMEOUT)),
+		})
+	}
+
+	pub fn new_with_options(options: ClipboardContextX11Options) -> Result<Self> {
 		// build connection to X server
 		let ctx = InnerContext::new()?;
 		let ctx_arc = Arc::new(ctx);
@@ -304,7 +321,11 @@ impl ClipboardContext {
 				println!("process_server_req error: {:?}", e);
 			}
 		});
-		Ok(Self { inner: ctx_arc })
+
+		Ok(Self {
+			inner: ctx_arc,
+			read_timeout: options.read_timeout,
+		})
 	}
 
 	fn read(&self, format: &Atom) -> Result<Vec<u8>> {
@@ -324,7 +345,7 @@ impl ClipboardContext {
 			clipboard,
 			*format,
 			atoms.PROPERTY,
-			Some(Duration::from_millis(500)),
+			self.read_timeout,
 			sequence_num,
 		)?;
 

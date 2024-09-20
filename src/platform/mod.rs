@@ -25,4 +25,6 @@ mod x11;
 		target_os = "emscripten"
 	))
 ))]
-pub use x11::{ClipboardContext, ClipboardWatcherContext, WatcherShutdown};
+pub use x11::{
+	ClipboardContext, ClipboardContextX11Options, ClipboardWatcherContext, WatcherShutdown,
+};
