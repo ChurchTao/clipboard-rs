@@ -9,7 +9,7 @@ license = "MIT"
 readme = "README.md"
 keywords = ["clipboard"]
 edition = "2021"
-rust-version = "1.63.0"
+rust-version = "1.67.0"
 
 [dependencies]
 image = "0.25.2"
