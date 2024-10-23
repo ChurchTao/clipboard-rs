@@ -91,7 +91,7 @@ pub struct RustImageData {
 	data: Option<DynamicImage>,
 }
 
-/// 此处的 RustImageBuffer 已经是带有图片格式的字节流，例如 png,jpeg;
+/// 此处的 `RustImageBuffer` 已经是带有图片格式的字节流，例如 png,jpeg;
 pub struct RustImageBuffer(Vec<u8>);
 
 pub trait RustImage: Sized {

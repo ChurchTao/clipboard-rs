@@ -56,8 +56,8 @@ pub trait Clipboard: Send {
 }
 
 pub trait ClipboardWatcher<T: ClipboardHandler>: Send {
-	/// zh: 添加一个剪切板变化处理器，可以添加多个处理器，处理器需要实现 ClipboardHandler 这个trait
-	/// en: Add a clipboard change handler, you can add multiple handlers, the handler needs to implement the trait ClipboardHandler
+	/// zh: 添加一个剪切板变化处理器，可以添加多个处理器，处理器需要实现 [`ClipboardHandler`] 这个trait
+	/// en: Add a clipboard change handler, you can add multiple handlers, the handler needs to implement the trait [`ClipboardHandler`]
 	fn add_handler(&mut self, handler: T) -> &mut Self;
 
 	/// zh: 开始监视剪切板变化，这是一个阻塞方法，直到监视结束，或者调用了stop方法，所以建议在单独的线程中调用
