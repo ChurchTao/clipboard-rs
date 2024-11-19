@@ -12,10 +12,11 @@ edition = "2021"
 rust-version = "1.67.0"
 
 [dependencies]
-image = "0.25.2"
+image = { version = "0.25.4", default-features = false, features = ["png"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 clipboard-win = { version = "5.4.0", features = ["monitor"] }
+image = { version = "0.25.4", default-features = false, features = ["bmp", "png"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # cocoa = "0.26.0"
