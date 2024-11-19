@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.2 (2024-11-19) [released]
+
+- Convergence dep: `image` to `jpeg/png/tiff/bmp` [pr#54](https://github.com/ChurchTao/clipboard-rs/pull/54)
+
 ## v0.2.1 (2024-08-26) [released]
 
 ### zh:
