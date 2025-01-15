@@ -269,4 +269,8 @@ impl RustImageBuffer {
 		std::fs::write(path, &self.0)?;
 		Ok(())
 	}
+
+	pub fn into_inner(self) -> Vec<u8> {
+		self.0
+	}
 }
