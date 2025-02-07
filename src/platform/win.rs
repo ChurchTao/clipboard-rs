@@ -342,7 +342,7 @@ impl Clipboard for ClipboardContext {
 
 	fn set_image(&self, image: RustImageData) -> Result<()> {
 		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| format!("Open clipboard error, code = {}", code));
+			.map_err(|code| format!("Open clipboard error, code = {}", code))?;
 		let res = clipboard_win::empty();
 		if let Err(e) = res {
 			return Err(format!("Empty clipboard error, code = {}", e).into());
@@ -352,16 +352,25 @@ impl Clipboard for ClipboardContext {
 		let cf_png_format = self.format_map.get(CF_PNG);
 		if cf_png_format.is_some() {
 			let png = image.to_png()?;
-			let write_png_res = set_without_clear(*cf_png_format.unwrap(), png.get_bytes());
-			if let Err(e) = write_png_res {
-				return Err(format!("set png image error, code = {}", e).into());
+			if let Err(e) = set_without_clear(*cf_png_format.unwrap(), png.get_bytes()) {
+				eprintln!("set png image error, code = {}", e);
+				// continue set bmp image
 			}
 		}
-		let bmp = image
+
+		// 确保图像使用 RGBA 格式
+		let mut img = image.to_dynamic_image();
+		if img.color() != image::ColorType::Rgba8 {
+			img = img.into_rgba8().into();
+		}
+
+		// 转换为 BMP 并设置到剪贴板
+		let bmp = RustImageData::from_dynamic_image(img)
 			.to_bitmap()
-			.map_err(|e| format!("to bitmap error, code = {}", e))?;
-		let res = set_bitmap_with(bmp.get_bytes(), options::NoClear);
-		res.map_err(|e| format!("set image error, code = {}", e).into())
+			.map_err(|e| format!("transform to bitmap error, code = {}", e))?;
+
+		set_bitmap_with(bmp.get_bytes(), options::NoClear)
+			.map_err(|e| format!("set image error, code = {}", e).into())
 	}
 
 	fn set_files(&self, files: Vec<String>) -> Result<()> {
