@@ -357,15 +357,8 @@ impl Clipboard for ClipboardContext {
 				// continue set bmp image
 			}
 		}
-
-		// 确保图像使用 RGBA 格式
-		let mut img = image.get_dynamic_image();
-		if img.color() != image::ColorType::Rgba8 {
-			img = img.into_rgba8().into();
-		}
-
 		// 转换为 BMP 并设置到剪贴板
-		let bmp = RustImageData::from_dynamic_image(img)
+		let bmp = image
 			.to_bitmap()
 			.map_err(|e| format!("transform to bitmap error, code = {}", e))?;
 
