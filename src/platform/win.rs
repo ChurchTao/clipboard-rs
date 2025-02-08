@@ -478,7 +478,7 @@ impl Drop for WatcherShutdown {
 	}
 }
 
-/// 将输入的 UTF-8 字符串转换为宽字符（UTF-16）字符串
+// 将输入的 UTF-8 字符串转换为宽字符（UTF-16）字符串
 // fn utf8_to_utf16(input: &str) -> Vec<u16> {
 // 	let mut vec: Vec<u16> = input.encode_utf16().collect();
 // 	vec.push(0);
