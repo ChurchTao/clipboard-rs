@@ -359,7 +359,7 @@ impl Clipboard for ClipboardContext {
 		}
 
 		// 确保图像使用 RGBA 格式
-		let mut img = image.to_dynamic_image();
+		let mut img = image.get_dynamic_image();
 		if img.color() != image::ColorType::Rgba8 {
 			img = img.into_rgba8().into();
 		}
