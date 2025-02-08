@@ -137,6 +137,7 @@ pub trait RustImage: Sized {
 	/// zh: 转为 png 格式,返回的为新的图片，本身数据不会修改
 	fn to_png(&self) -> Result<RustImageBuffer>;
 
+	#[cfg(target_os = "windows")]
 	fn to_bitmap(&self) -> Result<RustImageBuffer>;
 
 	fn save_to_path(&self, path: &str) -> Result<()>;
@@ -275,6 +276,7 @@ impl RustImage for RustImageData {
 		self.encode_image(ColorType::Rgba8, ImageFormat::Png)
 	}
 
+	#[cfg(target_os = "windows")]
 	fn to_bitmap(&self) -> Result<RustImageBuffer> {
 		// BMP 使用 RGBA 格式
 		self.encode_image(ColorType::Rgba8, ImageFormat::Bmp)
