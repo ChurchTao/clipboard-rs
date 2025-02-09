@@ -1,28 +1,33 @@
 # Changelog
 
+## v0.2.3 (2025-02-07) [released]
+
+- Fix: [issues#57](https://github.com/ChurchTao/clipboard-rs/issues/57)
+- Fix: [pr#56](https://github.com/ChurchTao/clipboard-rs/pull/56)
+
 ## v0.2.2 (2024-11-19) [released]
 
 - Convergence dep: `image` to `jpeg/png/tiff/bmp` [pr#54](https://github.com/ChurchTao/clipboard-rs/pull/54)
 
 ## v0.2.1 (2024-08-26) [released]
 
-### zh:
+### zh
 
 - 增加 X11 启动参数，自定义读取的超时时间 [issues#45](https://github.com/ChurchTao/clipboard-rs/issues/45)
 
-### en:
+### en
 
 - Add X11 startup parameters to customize the timeout for reading [issues#45](https://github.com/ChurchTao/clipboard-rs/issues/45)
 
 ## v0.2.0 (2024-08-25) [released]
 
-### zh:
+### zh
 
 - macOS 性能优化，增强 test 类，替换使用 objc2
 - 修复 windows 读取 rtf 可能失败的情况
 - 修复读取 html 少<的情况，【因为 wps 写入的 StartFragment 有问题】
 
-### en:
+### en
 
 - macOS performance optimization, enhanced test class, replaced with objc2
 - Fixed the case where reading rtf on windows may fail

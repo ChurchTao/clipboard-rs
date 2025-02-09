@@ -1,5 +1,5 @@
 use image::imageops::FilterType;
-use image::{DynamicImage, GenericImageView, ImageFormat, RgbaImage};
+use image::{ColorType, DynamicImage, GenericImageView, ImageFormat, RgbaImage};
 use std::error::Error;
 use std::io::Cursor;
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
@@ -125,12 +125,19 @@ pub trait RustImage: Sized {
 	/// zh: 调整图片大小，不保留长宽比
 	fn resize(&self, width: u32, height: u32, filter: FilterType) -> Result<Self>;
 
+	fn encode_image(
+		&self,
+		target_color_type: ColorType,
+		format: ImageFormat,
+	) -> Result<RustImageBuffer>;
+
 	fn to_jpeg(&self) -> Result<RustImageBuffer>;
 
 	/// en: Convert to png format, the returned image is a new image, and the data itself will not be modified
 	/// zh: 转为 png 格式,返回的为新的图片，本身数据不会修改
 	fn to_png(&self) -> Result<RustImageBuffer>;
 
+	#[cfg(target_os = "windows")]
 	fn to_bitmap(&self) -> Result<RustImageBuffer>;
 
 	fn save_to_path(&self, path: &str) -> Result<()>;
@@ -138,21 +145,6 @@ pub trait RustImage: Sized {
 	fn get_dynamic_image(&self) -> Result<DynamicImage>;
 
 	fn to_rgba8(&self) -> Result<RgbaImage>;
-}
-
-macro_rules! image_to_format {
-	($name:ident, $format:expr) => {
-		fn $name(&self) -> Result<RustImageBuffer> {
-			match &self.data {
-				Some(image) => {
-					let mut bytes: Vec<u8> = Vec::new();
-					image.write_to(&mut Cursor::new(&mut bytes), $format)?;
-					Ok(RustImageBuffer(bytes))
-				}
-				None => Err("image is empty".into()),
-			}
-		}
-	};
 }
 
 impl RustImage for RustImageData {
@@ -229,12 +221,6 @@ impl RustImage for RustImageData {
 		}
 	}
 
-	image_to_format!(to_jpeg, ImageFormat::Jpeg);
-
-	image_to_format!(to_png, ImageFormat::Png);
-
-	image_to_format!(to_bitmap, ImageFormat::Bmp);
-
 	fn save_to_path(&self, path: &str) -> Result<()> {
 		match &self.data {
 			Some(image) => {
@@ -257,6 +243,43 @@ impl RustImage for RustImageData {
 			Some(image) => Ok(image.to_rgba8()),
 			None => Err("image is empty".into()),
 		}
+	}
+
+	// 私有辅助函数，处理图像格式转换和编码
+	fn encode_image(
+		&self,
+		target_color_type: ColorType,
+		format: ImageFormat,
+	) -> Result<RustImageBuffer> {
+		let image = self.data.as_ref().ok_or("image is empty")?;
+
+		let mut bytes = Vec::new();
+		match (image.color(), target_color_type) {
+			(ColorType::Rgba8, ColorType::Rgb8) => image
+				.to_rgb8()
+				.write_to(&mut Cursor::new(&mut bytes), format)?,
+			(_, ColorType::Rgba8) => image
+				.to_rgba8()
+				.write_to(&mut Cursor::new(&mut bytes), format)?,
+			_ => image.write_to(&mut Cursor::new(&mut bytes), format)?,
+		};
+		Ok(RustImageBuffer(bytes))
+	}
+
+	fn to_jpeg(&self) -> Result<RustImageBuffer> {
+		// JPEG 需要 RGB 格式（不支持 alpha 通道）
+		self.encode_image(ColorType::Rgb8, ImageFormat::Jpeg)
+	}
+
+	fn to_png(&self) -> Result<RustImageBuffer> {
+		// PNG 使用 RGBA 格式以支持透明度
+		self.encode_image(ColorType::Rgba8, ImageFormat::Png)
+	}
+
+	#[cfg(target_os = "windows")]
+	fn to_bitmap(&self) -> Result<RustImageBuffer> {
+		// BMP 使用 RGBA 格式
+		self.encode_image(ColorType::Rgba8, ImageFormat::Bmp)
 	}
 }
 
