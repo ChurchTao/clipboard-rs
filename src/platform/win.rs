@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::mpsc::{Receiver, Sender};
-use std::thread;
 use std::time::Duration;
+use std::{mem, ptr, thread};
 
 use crate::common::{ContentData, Result, RustImage, RustImageData};
 use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
@@ -14,6 +14,14 @@ use clipboard_win::{
 };
 use image::codecs::bmp::BmpDecoder;
 use image::DynamicImage;
+use windows::Win32::Foundation::HANDLE;
+use windows::Win32::Foundation::HWND;
+use windows::Win32::Graphics::Gdi::ReleaseDC;
+use windows::Win32::Graphics::Gdi::{
+	CreateDIBitmap, DeleteObject, GetDC, BITMAPFILEHEADER, BITMAPINFO, BITMAPINFOHEADER,
+	BITMAPV5HEADER, CBM_INIT, DIB_RGB_COLORS, HDC, HGDIOBJ,
+};
+use windows::Win32::System::DataExchange::SetClipboardData;
 
 pub struct WatcherShutdown {
 	stop_signal: Sender<()>,
@@ -362,7 +370,7 @@ impl Clipboard for ClipboardContext {
 			.to_bitmap()
 			.map_err(|e| format!("transform to bitmap error, code = {}", e))?;
 
-		set_without_clear(formats::CF_BITMAP, bmp.get_bytes())
+		set_bitmap_inner(bmp.get_bytes())
 			.map_err(|e| format!("set image error, code = {}", e).into())
 	}
 
@@ -609,4 +617,82 @@ fn extract_html_from_clipboard_data(data: &str) -> Result<String> {
 		return Err("Invalid HTML offsets".into());
 	};
 	Ok(data[start_idx..end_idx].to_string())
+}
+
+fn set_bitmap_inner(data: &[u8]) -> Result<()> {
+	const FILE_HEADER_LEN: usize = mem::size_of::<BITMAPFILEHEADER>();
+	const INFO_HEADER_LEN: usize = mem::size_of::<BITMAPV5HEADER>();
+
+	if data.len() <= (FILE_HEADER_LEN + INFO_HEADER_LEN) {
+		return Err("Invalid bitmap data".into());
+	}
+
+	let mut file_header = mem::MaybeUninit::<BITMAPFILEHEADER>::uninit();
+	let mut info_header = mem::MaybeUninit::<BITMAPV5HEADER>::uninit();
+
+	let (file_header, info_header) = unsafe {
+		ptr::copy_nonoverlapping(
+			data.as_ptr(),
+			file_header.as_mut_ptr() as _,
+			FILE_HEADER_LEN,
+		);
+		ptr::copy_nonoverlapping(
+			data.as_ptr().add(FILE_HEADER_LEN),
+			info_header.as_mut_ptr() as _,
+			INFO_HEADER_LEN,
+		);
+		(file_header.assume_init(), info_header.assume_init())
+	};
+
+	if data.len() <= file_header.bfOffBits as usize {
+		return Err("Invalid bitmap data".into());
+	}
+
+	let bitmap = &data[file_header.bfOffBits as _..];
+
+	if bitmap.len() < info_header.bV5SizeImage as usize {
+		return Err("Invalid bitmap data".into());
+	}
+
+	let dc = DeviceContext::new()?;
+
+	let handle = unsafe {
+		CreateDIBitmap(
+			dc.0,
+			Some(&info_header as *const _ as *const BITMAPINFOHEADER),
+			CBM_INIT as u32,
+			Some(bitmap.as_ptr() as _),
+			Some(&info_header as *const _ as *const BITMAPINFO),
+			DIB_RGB_COLORS,
+		)
+	};
+
+	if handle.is_invalid() {
+		return Err("Failed to create DIB".into());
+	}
+
+	if let Err(err) = unsafe { SetClipboardData(formats::CF_BITMAP, Some(HANDLE(handle.0))) } {
+		let _ = unsafe { DeleteObject(HGDIOBJ(handle.0)) };
+		Err(err.into())
+	} else {
+		Ok(())
+	}
+}
+
+struct DeviceContext(HDC);
+
+impl DeviceContext {
+	fn new() -> Result<Self> {
+		let dc = unsafe { GetDC(Some(HWND::default())) };
+		if dc.is_invalid() {
+			return Err("Failed to get DC".into());
+		}
+		Ok(Self(dc))
+	}
+}
+
+impl Drop for DeviceContext {
+	fn drop(&mut self) {
+		unsafe { ReleaseDC(Some(HWND::default()), self.0) };
+	}
 }
