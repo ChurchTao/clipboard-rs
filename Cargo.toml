@@ -1,6 +1,6 @@
 [package]
 name = "clipboard-rs"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["ChurchTao <swkzymlyy@gmail.com>"]
 description = "Cross-platform clipboard API (text | image | rich text | html | files | monitoring changes) | 跨平台剪贴板 API(文本|图片|富文本|html|文件|监听变化) Windows,MacOS,Linux"
 repository = "https://github.com/ChurchTao/clipboard-rs"
@@ -12,14 +12,14 @@ edition = "2021"
 rust-version = "1.67.0"
 
 [dependencies]
-image = { version = "0.25.4", default-features = false, features = [
+image = { version = "0.25.5", default-features = false, features = [
     "png",
     "jpeg",
 ] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 clipboard-win = { version = "5.4.0", features = ["monitor"] }
-image = { version = "0.25.4", default-features = false, features = [
+image = { version = "0.25.5", default-features = false, features = [
     "bmp",
     "png",
     "jpeg",
@@ -34,18 +34,18 @@ windows = { version = "0.59.0", features = [
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # cocoa = "0.26.0"
-objc2 = { version = "0.5.2" }
-objc2-foundation = { version = "0.2.2", features = [
+objc2 = { version = "0.6.0" }
+objc2-foundation = { version = "0.3.0", features = [
     "NSArray",
     "NSString",
     "NSEnumerator",
 ] }
-objc2-app-kit = { version = "0.2.2", features = [
+objc2-app-kit = { version = "0.3.0", features = [
     "NSPasteboard",
     "NSPasteboardItem",
     "NSImage",
 ] }
-image = { version = "0.25.4", default-features = false, features = [
+image = { version = "0.25.5", default-features = false, features = [
     "tiff",
     "png",
     "jpeg",

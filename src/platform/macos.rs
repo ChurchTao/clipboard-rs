@@ -1,11 +1,8 @@
 use crate::common::{Result, RustImage, RustImageData};
 use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
 use objc2::rc::Retained;
-use objc2::{
-	rc::{autoreleasepool, Id},
-	runtime::ProtocolObject,
-	ClassType,
-};
+use objc2::AllocAnyThread;
+use objc2::{rc::autoreleasepool, runtime::ProtocolObject};
 use objc2_app_kit::{
 	NSFilenamesPboardType, NSImage, NSPasteboard, NSPasteboardItem, NSPasteboardType,
 	NSPasteboardTypeHTML, NSPasteboardTypePNG, NSPasteboardTypeRTF, NSPasteboardTypeString,
@@ -18,11 +15,11 @@ use std::time::Duration;
 use std::vec;
 
 pub struct ClipboardContext {
-	pasteboard: Id<NSPasteboard>,
+	pasteboard: Retained<NSPasteboard>,
 }
 
 pub struct ClipboardWatcherContext<T: ClipboardHandler> {
-	pasteboard: Id<NSPasteboard>,
+	pasteboard: Retained<NSPasteboard>,
 	handlers: Vec<T>,
 	stop_signal: Sender<()>,
 	stop_receiver: Receiver<()>,
@@ -114,11 +111,14 @@ impl ClipboardContext {
 	}
 
 	fn set_files(&self, files: &[String]) -> Result<()> {
-		let ns_string_arr =
-			NSArray::from_vec(files.iter().map(|f| NSString::from_str(f)).collect());
+		let ns_string_arr = files
+			.iter()
+			.map(|f| NSString::from_str(f))
+			.collect::<Vec<_>>();
+		let array: Retained<NSArray<NSString>> = NSArray::from_retained_slice(&ns_string_arr);
 		unsafe {
 			self.pasteboard
-				.setPropertyList_forType(&ns_string_arr, NSFilenamesPboardType)
+				.setPropertyList_forType(&array, NSFilenamesPboardType)
 		};
 		Ok(())
 	}
@@ -131,24 +131,25 @@ impl ClipboardContext {
 			}
 		}
 		autoreleasepool(|_| unsafe {
-			let mut write_objects: Vec<Id<ProtocolObject<(dyn NSPasteboardWriting + 'static)>>> =
-				vec![];
+			let mut write_objects: Vec<
+				Retained<ProtocolObject<(dyn NSPasteboardWriting + 'static)>>,
+			> = vec![];
 			for d in data {
 				match d {
 					ClipboardContent::Text(text) => {
 						let item = NSPasteboardItem::new();
 						item.setString_forType(&NSString::from_str(text), NSPasteboardTypeString);
-						write_objects.push(ProtocolObject::from_id(item));
+						write_objects.push(ProtocolObject::from_retained(item));
 					}
 					ClipboardContent::Rtf(rtf) => {
 						let item = NSPasteboardItem::new();
 						item.setString_forType(&NSString::from_str(rtf), NSPasteboardTypeRTF);
-						write_objects.push(ProtocolObject::from_id(item));
+						write_objects.push(ProtocolObject::from_retained(item));
 					}
 					ClipboardContent::Html(html) => {
 						let item = NSPasteboardItem::new();
 						item.setString_forType(&NSString::from_str(html), NSPasteboardTypeHTML);
-						write_objects.push(ProtocolObject::from_id(item));
+						write_objects.push(ProtocolObject::from_retained(item));
 					}
 					ClipboardContent::Image(image) => {
 						let png_img = image.to_png();
@@ -163,7 +164,7 @@ impl ClipboardContext {
 							};
 							let item = NSPasteboardItem::new();
 							item.setData_forType(&ns_data, NSPasteboardTypePNG);
-							write_objects.push(ProtocolObject::from_id(item));
+							write_objects.push(ProtocolObject::from_retained(item));
 						};
 					}
 					ClipboardContent::Files(files) => {
@@ -178,18 +179,18 @@ impl ClipboardContext {
 							)
 						};
 						self.pasteboard.declareTypes_owner(
-							&NSArray::from_vec(vec![NSString::from_str(format)]),
+							&NSArray::from_retained_slice(&[NSString::from_str(format)]),
 							None,
 						);
 						let item = NSPasteboardItem::new();
 						item.setData_forType(&ns_data, &NSString::from_str(format));
-						write_objects.push(ProtocolObject::from_id(item));
+						write_objects.push(ProtocolObject::from_retained(item));
 					}
 				}
 			}
 			if !self
 				.pasteboard
-				.writeObjects(&NSArray::from_vec(write_objects))
+				.writeObjects(&NSArray::from_retained_slice(&write_objects))
 			{
 				return Err("writeObjects failed");
 			}
@@ -230,7 +231,7 @@ impl Clipboard for ClipboardContext {
 			},
 			ContentFormat::Image => unsafe {
 				// Currently only judge whether there is a png format
-				let types = NSArray::from_vec(vec![
+				let types = NSArray::from_retained_slice(&[
 					NSPasteboardTypePNG.to_owned(),
 					NSPasteboardTypeTIFF.to_owned(),
 				]);
@@ -241,7 +242,7 @@ impl Clipboard for ClipboardContext {
 				self.pasteboard.availableTypeFromArray(&types).is_some()
 			},
 			ContentFormat::Other(format) => unsafe {
-				let types = NSArray::from_vec(vec![NSString::from_str(&format)]);
+				let types = NSArray::from_retained_slice(&[NSString::from_str(&format)]);
 				self.pasteboard.availableTypeFromArray(&types).is_some()
 			},
 		}
@@ -254,7 +255,7 @@ impl Clipboard for ClipboardContext {
 
 	fn get_buffer(&self, format: &str) -> Result<Vec<u8>> {
 		if let Some(data) = unsafe { self.pasteboard.dataForType(&NSString::from_str(format)) } {
-			return Ok(data.bytes().to_vec());
+			return Ok(data.to_vec());
 		}
 		Err("no data".into())
 	}
@@ -275,7 +276,7 @@ impl Clipboard for ClipboardContext {
 		autoreleasepool(|_| {
 			let png_data = unsafe { self.pasteboard.dataForType(NSPasteboardTypePNG) };
 			if let Some(data) = png_data {
-				return RustImageData::from_bytes(data.bytes());
+				return RustImageData::from_bytes(&data.to_vec());
 			};
 			// if no png data, read NSImage;
 			let ns_image =
@@ -283,7 +284,7 @@ impl Clipboard for ClipboardContext {
 			if let Some(image) = ns_image {
 				let tiff_data = unsafe { image.TIFFRepresentation() };
 				if let Some(data) = tiff_data {
-					return RustImageData::from_bytes(data.bytes());
+					return RustImageData::from_bytes(&data.to_vec());
 				}
 			};
 			Err("no image data".into())
@@ -296,7 +297,7 @@ impl Clipboard for ClipboardContext {
 		unsafe {
 			if let Some(array) = ns_array {
 				// cast to NSArray<NSString>
-				let array: Retained<NSArray<NSString>> = Retained::cast(array);
+				let array: Retained<NSArray<NSString>> = Retained::cast_unchecked(array);
 				array.iter().for_each(|item| {
 					res.push(item.to_string());
 				});
@@ -357,7 +358,7 @@ impl Clipboard for ClipboardContext {
 							{
 								results.push(ClipboardContent::Other(
 									format_name.to_string(),
-									data.bytes().to_vec(),
+									data.to_vec(),
 								));
 								break;
 							}
