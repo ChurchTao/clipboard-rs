@@ -362,7 +362,7 @@ impl Clipboard for ClipboardContext {
 			.to_bitmap()
 			.map_err(|e| format!("transform to bitmap error, code = {}", e))?;
 
-		set_bitmap_with(bmp.get_bytes(), options::NoClear)
+		set_without_clear(formats::CF_BITMAP, bmp.get_bytes())
 			.map_err(|e| format!("set image error, code = {}", e).into())
 	}
 
