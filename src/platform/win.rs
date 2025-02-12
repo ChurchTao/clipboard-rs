@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use crate::common::{ContentData, Result, RustImage, RustImageData};
 use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
-use clipboard_win::raw::{set_bitmap_with, set_file_list_with, set_string_with, set_without_clear};
+use clipboard_win::raw::{set_file_list_with, set_string_with, set_without_clear};
 use clipboard_win::types::c_uint;
 use clipboard_win::{
 	formats, get, get_clipboard, options, raw, set_clipboard, Clipboard as ClipboardWin, Monitor,
