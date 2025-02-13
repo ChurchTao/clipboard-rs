@@ -24,6 +24,8 @@ clipboard-rs is a cross-platform library written in Rust for getting and setting
 - [x] MacOS Support
 - [x] Linux Support (x11)
 - [x] Windows Support
+- [ ] iOS Support (🚧)
+- [ ] Android Support (🚧)
 
 ## Usage
 

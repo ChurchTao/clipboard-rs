@@ -16,6 +16,8 @@ clipboard-rs 是一个用 Rust 语言编写的跨平台库，用于获取和设�
 - [x] MacOS 支持
 - [x] Linux 支持 (x11)
 - [x] Windows 支持
+- [ ] iOS 支持 (🚧)
+- [ ] Android 支持 (🚧)
 
 ## 使用方法
 
