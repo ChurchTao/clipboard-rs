@@ -14,11 +14,9 @@ use clipboard_win::{
 };
 use image::codecs::bmp::BmpDecoder;
 use image::DynamicImage;
-use windows::Win32::Foundation::HANDLE;
-use windows::Win32::Foundation::HWND;
-use windows::Win32::Graphics::Gdi::ReleaseDC;
+use windows::Win32::Foundation::{HANDLE, HWND};
 use windows::Win32::Graphics::Gdi::{
-	CreateDIBitmap, DeleteObject, GetDC, BITMAPFILEHEADER, BITMAPINFO, BITMAPINFOHEADER,
+	CreateDIBitmap, DeleteObject, GetDC, ReleaseDC, BITMAPFILEHEADER, BITMAPINFO, BITMAPINFOHEADER,
 	BITMAPV5HEADER, CBM_INIT, DIB_RGB_COLORS, HDC, HGDIOBJ,
 };
 use windows::Win32::System::DataExchange::SetClipboardData;
@@ -659,7 +657,7 @@ fn set_bitmap_inner(data: &[u8]) -> Result<()> {
 	let handle = unsafe {
 		CreateDIBitmap(
 			dc.0,
-			Some(&info_header as *const _ as *const BITMAPINFOHEADER),
+			Some(&info_header as *const _ as *const BITMAPV5HEADER),
 			CBM_INIT as u32,
 			Some(bitmap.as_ptr() as _),
 			Some(&info_header as *const _ as *const BITMAPINFO),
