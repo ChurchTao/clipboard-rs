@@ -18,6 +18,12 @@ image = { version = "0.25.5", default-features = false, features = [
 ] }
 
 [target.'cfg(target_os = "ios")'.dependencies]
+objc2 = { version = "0.6.0" }
+objc2-foundation = { version = "0.3.0", features = [
+    "NSArray",
+    "NSString",
+    "NSEnumerator",
+] }
 objc2-ui-kit = { version = "0.3.0", features = ["UIPasteboard"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

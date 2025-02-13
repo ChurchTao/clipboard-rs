@@ -1,9 +1,9 @@
 #[cfg(target_os = "ios")]
 mod ios;
+#[cfg(target_os = "ios")]
+pub use ios::{ClipboardContext, ClipboardWatcherContext, WatcherShutdown};
 #[cfg(target_os = "macos")]
 mod macos;
-#[cfg(target_os = "ios")]
-pub use ios::ClipboardContext;
 #[cfg(target_os = "macos")]
 pub use macos::{ClipboardContext, ClipboardWatcherContext, WatcherShutdown};
 #[cfg(target_os = "windows")]

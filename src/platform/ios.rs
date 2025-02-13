@@ -9,6 +9,9 @@ use objc2_ui_kit::{UIImage, UIImagePNGRepresentation, UIPasteboard};
 pub struct ClipboardContext {
 	clipboard: Retained<UIPasteboard>,
 }
+pub struct ClipboardWatcherContext {}
+
+pub struct WatcherShutdown {}
 
 impl ClipboardContext {
 	pub fn new() -> Result<Self> {
