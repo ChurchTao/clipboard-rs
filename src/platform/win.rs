@@ -657,7 +657,7 @@ fn set_bitmap_inner(data: &[u8]) -> Result<()> {
 	let handle = unsafe {
 		CreateDIBitmap(
 			dc.0,
-			Some(&info_header as *const _ as *const BITMAPV5HEADER),
+			Some(&info_header as *const _ as *const BITMAPINFOHEADER),
 			CBM_INIT as u32,
 			Some(bitmap.as_ptr() as _),
 			Some(&info_header as *const _ as *const BITMAPINFO),
