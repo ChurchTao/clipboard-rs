@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.4 (2025-02-07) [released]
+
+- Fix: [pr#56](https://github.com/ChurchTao/clipboard-rs/pull/56)
+
 ## v0.2.3 (2025-02-07) [released]
 
 - Fix: [issues#57](https://github.com/ChurchTao/clipboard-rs/issues/57)
