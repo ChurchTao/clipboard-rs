@@ -19,11 +19,25 @@ clipboard-rs is a cross-platform library written in Rust for getting and setting
 - File (In `file-uri-list` format)
 - Any type (by specifying the type identifier) can be obtained through the `available_formats` method
 
+### Platform Support Type Comparison Table
+
+| Type          | Windows              | macOS               | Linux(X11) | iOS(Beta) | Android(WIP) |
+| ------------- | -------------------- | ------------------- | ---------- | --------- | ------------ |
+| Plain Text    | ✅                   | ✅                  | ✅         | ✅        | 🚧           |
+| HTML          | ✅                   | ✅                  | ✅         | ✅        | 🚧           |
+| RTF           | ✅                   | ✅                  | ✅         | ✅        | 🚧           |
+| Image         | PNG(preferred)/DIBV5 | PNG(preferred)/TIFF | PNG        | PNG       | 🚧           |
+| File List     | ✅                   | ✅                  | ✅         | ❌        | 🚧           |
+| Custom Type   | ✅                   | ✅                  | ✅         | ✅        | 🚧           |
+| Watch Changes | ✅                   | ✅                  | ✅         | ✅        | 🚧           |
+
 ## Development Plan
 
 - [x] MacOS Support
 - [x] Linux Support (x11)
 - [x] Windows Support
+- [x] iOS Support (Beta)
+- [ ] Android Support (🚧)
 
 ## Usage
 
