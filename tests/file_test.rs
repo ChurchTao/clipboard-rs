@@ -15,6 +15,10 @@ const TMP_PATH: &str = "C:\\Windows\\Temp\\";
 ))]
 const TMP_PATH: &str = "/tmp/";
 
+// ios
+#[cfg(any(target_os = "ios", target_os = "android"))]
+const TMP_PATH: &str = "/tmp/";
+
 #[test]
 fn test_file() {
 	let ctx = ClipboardContext::new().unwrap();

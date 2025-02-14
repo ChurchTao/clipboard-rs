@@ -1,17 +1,97 @@
 use crate::{
 	common::{Result, RustImage},
-	Clipboard, ContentFormat, RustImageData,
+	Clipboard, ClipboardHandler, ClipboardWatcher, ContentFormat, RustImageData,
 };
 use objc2::rc::Retained;
 use objc2_foundation::{NSArray, NSData, NSString};
 use objc2_ui_kit::{UIImage, UIImagePNGRepresentation, UIPasteboard};
+use std::{
+	sync::mpsc::{self, Receiver, Sender},
+	time::Duration,
+};
 
 pub struct ClipboardContext {
 	clipboard: Retained<UIPasteboard>,
 }
-pub struct ClipboardWatcherContext {}
+pub struct ClipboardWatcherContext<T: ClipboardHandler> {
+	clipboard: Retained<UIPasteboard>,
+	handlers: Vec<T>,
+	running: bool,
+	stop_signal: Sender<()>,
+	stop_receiver: Receiver<()>,
+}
 
-pub struct WatcherShutdown {}
+impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
+	pub fn new() -> Result<Self> {
+		let clipboard = unsafe { UIPasteboard::generalPasteboard() };
+		let (tx, rx) = mpsc::channel();
+		Ok(Self {
+			clipboard,
+			handlers: Vec::new(),
+			running: false,
+			stop_signal: tx,
+			stop_receiver: rx,
+		})
+	}
+}
+
+unsafe impl<T: ClipboardHandler> Send for ClipboardWatcherContext<T> {}
+
+impl<T: ClipboardHandler> ClipboardWatcher<T> for ClipboardWatcherContext<T> {
+	fn add_handler(&mut self, handler: T) -> &mut Self {
+		self.handlers.push(handler);
+		self
+	}
+
+	fn start_watch(&mut self) {
+		if self.running {
+			println!("already start watch!");
+			return;
+		}
+		if self.handlers.is_empty() {
+			println!("no handler, no need to start watch!");
+			return;
+		}
+		self.running = true;
+		let mut last_change_count = unsafe { self.clipboard.changeCount() };
+		loop {
+			// if receive stop signal, break loop
+			if self
+				.stop_receiver
+				.recv_timeout(Duration::from_millis(500))
+				.is_ok()
+			{
+				break;
+			}
+			let change_count = unsafe { self.clipboard.changeCount() };
+			if last_change_count == 0 {
+				last_change_count = change_count;
+			} else if change_count != last_change_count {
+				self.handlers
+					.iter_mut()
+					.for_each(|handler| handler.on_clipboard_change());
+				last_change_count = change_count;
+			}
+		}
+		self.running = false;
+	}
+
+	fn get_shutdown_channel(&self) -> WatcherShutdown {
+		WatcherShutdown {
+			stop_signal: self.stop_signal.clone(),
+		}
+	}
+}
+
+pub struct WatcherShutdown {
+	stop_signal: Sender<()>,
+}
+
+impl Drop for WatcherShutdown {
+	fn drop(&mut self) {
+		let _ = self.stop_signal.send(());
+	}
+}
 
 impl ClipboardContext {
 	pub fn new() -> Result<Self> {
