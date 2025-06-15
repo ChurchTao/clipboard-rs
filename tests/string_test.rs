@@ -52,3 +52,65 @@ fn test_string() {
 		}
 	}
 }
+
+#[test]
+#[cfg(target_os = "macos")]
+fn test_set_multiple_formats_is_one_item_macos() {
+	// Import macOS-specific types needed for verification
+	use objc2::rc::autoreleasepool;
+	use objc2_app_kit::{
+		NSPasteboard, NSPasteboardTypeHTML, NSPasteboardTypeRTF, NSPasteboardTypeString,
+	};
+
+	let ctx = ClipboardContext::new().unwrap();
+
+	let test_plain_txt = "Hello Text";
+	let test_rich_txt = "{\\rtf1 Hello RTF}";
+	let test_html = "<h1>Hello HTML</h1>";
+
+	let contents: Vec<ClipboardContent> = vec![
+		ClipboardContent::Text(test_plain_txt.to_string()),
+		ClipboardContent::Rtf(test_rich_txt.to_string()),
+		ClipboardContent::Html(test_html.to_string()),
+	];
+
+	// Action: Set the clipboard with multiple content types
+	ctx.set(contents).unwrap();
+
+	// Verification: Directly inspect the NSPasteboard to check the number of items.
+	// The correct behavior is to have ONE item with multiple representations.
+	// The buggy behavior creates THREE separate items.
+	autoreleasepool(|_| {
+		let pasteboard = unsafe { NSPasteboard::generalPasteboard() };
+		let items = unsafe { pasteboard.pasteboardItems() }
+			.expect("Failed to get pasteboard items for verification");
+
+		// [THIS IS THE KEY ASSERTION]
+		// It will fail on the original code because `items.count()` will be 3.
+		// It will pass on the fixed code because `items.count()` will be 1.
+		assert_eq!(
+			items.count(),
+			1,
+			"Setting multiple formats should create a single pasteboard item, but it created {}",
+			items.count()
+		);
+
+		// [BONUS ASSERTIONS]
+		// We can also verify that the single item contains all the correct types.
+		let item = items.objectAtIndex(0);
+		let types = unsafe { item.types() };
+
+		assert!(
+			unsafe { types.containsObject(NSPasteboardTypeString) },
+			"The single pasteboard item should contain the String type"
+		);
+		assert!(
+			unsafe { types.containsObject(NSPasteboardTypeRTF) },
+			"The single pasteboard item should contain the RTF type"
+		);
+		assert!(
+			unsafe { types.containsObject(NSPasteboardTypeHTML) },
+			"The single pasteboard item should contain the HTML type"
+		);
+	});
+}
