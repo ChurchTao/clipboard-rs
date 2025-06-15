@@ -119,7 +119,7 @@ impl InnerContext {
 					let mut targets = Vec::with_capacity(10);
 					targets.push(atoms.TARGETS);
 					targets.push(atoms.SAVE_TARGETS);
-					if data_list.len() > 0 {
+					if !data_list.is_empty() {
 						data_list.iter().for_each(|data| {
 							targets.push(data.format);
 						});
