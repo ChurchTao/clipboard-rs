@@ -318,7 +318,7 @@ impl ClipboardContext {
 		thread::spawn(move || {
 			let res = process_server_req(&ctx_clone);
 			if let Err(e) = res {
-				println!("process_server_req error: {:?}", e);
+				println!("process_server_req error: {e:?}");
 			}
 		});
 
@@ -393,7 +393,7 @@ fn process_server_req(context: &InnerContext) -> Result<()> {
 			.server_for_write
 			.conn
 			.wait_for_event()
-			.map_err(|e| format!("wait_for_event error: {:?}", e))?
+			.map_err(|e| format!("wait_for_event error: {e:?}"))?
 		{
 			Event::DestroyNotify(_) => {
 				// This window is being destroyed.
@@ -410,14 +410,14 @@ fn process_server_req(context: &InnerContext) -> Result<()> {
 						.wait_write_data
 						.write()
 						.map(|mut writer| writer.clear())
-						.map_err(|e| format!("write clipboard data error: {:?}", e))?;
+						.map_err(|e| format!("write clipboard data error: {e:?}"))?;
 				}
 			}
 			Event::SelectionRequest(event) => {
 				// Someone is requesting the clipboard content from us.
 				context
 					.handle_selection_request(event)
-					.map_err(|e| format!("handle_selection_request error: {:?}", e))?;
+					.map_err(|e| format!("handle_selection_request error: {e:?}"))?;
 			}
 			Event::SelectionNotify(event) => {
 				// We've requested the clipboard content and this is the answer.
