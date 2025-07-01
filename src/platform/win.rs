@@ -98,7 +98,7 @@ impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 impl Clipboard for ClipboardContext {
 	fn available_formats(&self) -> Result<Vec<String>> {
 		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| format!("Open clipboard error, code = {}", code));
+			.map_err(|code| format!("Open clipboard error, code = {code}"));
 		let format_count = clipboard_win::count_formats();
 		if format_count.is_none() {
 			return Ok(Vec::new());
@@ -147,10 +147,10 @@ impl Clipboard for ClipboardContext {
 
 	fn clear(&self) -> Result<()> {
 		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| format!("Open clipboard error, code = {}", code));
+			.map_err(|code| format!("Open clipboard error, code = {code}"));
 		let res = clipboard_win::empty();
 		if let Err(e) = res {
-			return Err(format!("Empty clipboard error, code = {}", e).into());
+			return Err(format!("Empty clipboard error, code = {e}").into());
 		}
 		Ok(())
 	}
@@ -164,7 +164,7 @@ impl Clipboard for ClipboardContext {
 		let buffer = get_clipboard(formats::RawData(format_uint));
 		match buffer {
 			Ok(data) => Ok(data),
-			Err(e) => Err(format!("Get buffer error, code = {}", e).into()),
+			Err(e) => Err(format!("Get buffer error, code = {e}").into()),
 		}
 	}
 
@@ -172,7 +172,7 @@ impl Clipboard for ClipboardContext {
 		let string: SysResult<String> = get_clipboard(formats::Unicode);
 		match string {
 			Ok(s) => Ok(s),
-			Err(e) => Err(format!("Get text error, code = {}", e).into()),
+			Err(e) => Err(format!("Get text error, code = {e}").into()),
 		}
 	}
 
@@ -194,7 +194,7 @@ impl Clipboard for ClipboardContext {
 				}
 				Err("Get html error".into())
 			}
-			Err(e) => Err(format!("Get buffer error, code = {}", e).into()),
+			Err(e) => Err(format!("Get buffer error, code = {e}").into()),
 		}
 	}
 
@@ -214,18 +214,18 @@ impl Clipboard for ClipboardContext {
 						BmpDecoder::new_without_file_header(Cursor::new(data.as_slice()))
 						// }
 					};
-					let decoder = decoder.map_err(|e| format!("{}", e))?;
+					let decoder = decoder.map_err(|e| format!("{e}"))?;
 					let dynamic_image =
-						DynamicImage::from_decoder(decoder).map_err(|e| format!("{}", e))?;
+						DynamicImage::from_decoder(decoder).map_err(|e| format!("{e}"))?;
 					Ok(RustImageData::from_dynamic_image(dynamic_image))
 				}
-				Err(e) => Err(format!("Get image error, code = {}", e).into()),
+				Err(e) => Err(format!("Get image error, code = {e}").into()),
 			}
 		} else if clipboard_win::is_format_avail(formats::CF_DIB) {
 			let res = get_clipboard(formats::Bitmap);
 			match res {
 				Ok(data) => RustImageData::from_bytes(&data),
-				Err(e) => Err(format!("Get image error, code = {}", e).into()),
+				Err(e) => Err(format!("Get image error, code = {e}").into()),
 			}
 		} else {
 			Err("No image data in clipboard".into())
@@ -236,13 +236,13 @@ impl Clipboard for ClipboardContext {
 		let files: SysResult<Vec<String>> = get_clipboard(formats::FileList);
 		match files {
 			Ok(f) => Ok(f),
-			Err(e) => Err(format!("Get files error, code = {}", e).into()),
+			Err(e) => Err(format!("Get files error, code = {e}").into()),
 		}
 	}
 
 	fn get(&self, formats: &[ContentFormat]) -> Result<Vec<ClipboardContent>> {
 		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| format!("Open clipboard error, code = {}", code));
+			.map_err(|code| format!("Open clipboard error, code = {code}"));
 		let mut res = Vec::new();
 		for format in formats {
 			match format {
@@ -329,12 +329,12 @@ impl Clipboard for ClipboardContext {
 
 	fn set_text(&self, text: String) -> Result<()> {
 		let res = set_clipboard(formats::Unicode, text);
-		res.map_err(|e| format!("set text error, code = {}", e).into())
+		res.map_err(|e| format!("set text error, code = {e}").into())
 	}
 
 	fn set_rich_text(&self, text: String) -> Result<()> {
 		let res = self.set_buffer(CF_RTF, text.as_bytes().to_vec());
-		res.map_err(|e| format!("set rich text error, code = {}", e).into())
+		res.map_err(|e| format!("set rich text error, code = {e}").into())
 	}
 
 	fn set_html(&self, html: String) -> Result<()> {
@@ -343,15 +343,15 @@ impl Clipboard for ClipboardContext {
 			formats::RawData(self.html_format.code()),
 			cf_html.as_bytes(),
 		);
-		res.map_err(|e| format!("set html error, code = {}", e).into())
+		res.map_err(|e| format!("set html error, code = {e}").into())
 	}
 
 	fn set_image(&self, image: RustImageData) -> Result<()> {
 		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| format!("Open clipboard error, code = {}", code))?;
+			.map_err(|code| format!("Open clipboard error, code = {code}"));
 		let res = clipboard_win::empty();
 		if let Err(e) = res {
-			return Err(format!("Empty clipboard error, code = {}", e).into());
+			return Err(format!("Empty clipboard error, code = {e}").into());
 		}
 		// chromium source code
 		// @link {https://source.chromium.org/chromium/chromium/src/+/main:ui/base/clipboard/clipboard_win.cc;l=771;drc=2a5aaed0ff3a0895c8551495c2656ed49baf742c;bpv=0;bpt=1}
@@ -359,32 +359,31 @@ impl Clipboard for ClipboardContext {
 		if cf_png_format.is_some() {
 			let png = image.to_png()?;
 			if let Err(e) = set_without_clear(*cf_png_format.unwrap(), png.get_bytes()) {
-				eprintln!("set png image error, code = {}", e);
+				eprintln!("set png image error, code = {e}");
 				// continue set bmp image
 			}
 		}
 		// 转换为 BMP 并设置到剪贴板
 		let bmp = image
 			.to_bitmap()
-			.map_err(|e| format!("transform to bitmap error, code = {}", e))?;
+			.map_err(|e| format!("transform to bitmap error, code = {e}"))?;
 
-		set_bitmap_inner(bmp.get_bytes())
-			.map_err(|e| format!("set image error, code = {}", e).into())
+		set_bitmap_inner(bmp.get_bytes()).map_err(|e| format!("set image error, code = {e}").into())
 	}
 
 	fn set_files(&self, files: Vec<String>) -> Result<()> {
 		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| format!("Open clipboard error, code = {}", code));
+			.map_err(|code| format!("Open clipboard error, code = {code}"));
 		let res = set_file_list_with(&files, options::DoClear);
-		res.map_err(|e| format!("set files error, code = {}", e).into())
+		res.map_err(|e| format!("set files error, code = {e}").into())
 	}
 
 	fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
 		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| format!("Open clipboard error, code = {}", code));
+			.map_err(|code| format!("Open clipboard error, code = {code}"));
 		let res = clipboard_win::empty();
 		if let Err(e) = res {
-			return Err(format!("Empty clipboard error, code = {}", e).into());
+			return Err(format!("Empty clipboard error, code = {e}").into());
 		}
 		for content in contents {
 			match content {
@@ -462,7 +461,7 @@ impl<T: ClipboardHandler> ClipboardWatcher<T> for ClipboardWatcherContext<T> {
 					continue;
 				}
 				Err(e) => {
-					eprintln!("watch error, code = {}", e);
+					eprintln!("watch error, code = {e}");
 					break;
 				}
 			}
@@ -550,10 +549,10 @@ fn plain_html_to_cf_html(fragment: &str) -> String {
 
 	let end_html_pos = buffer.len();
 
-	let start_html_pos_value = format!("{:0>10}", start_html_pos);
-	let end_html_pos_value = format!("{:0>10}", end_html_pos);
-	let start_fragment_pos_value = format!("{:0>10}", start_fragment_pos);
-	let end_fragment_pos_value = format!("{:0>10}", end_fragment_pos);
+	let start_html_pos_value = format!("{start_html_pos:0>10}");
+	let end_html_pos_value = format!("{end_html_pos:0>10}");
+	let start_fragment_pos_value = format!("{start_fragment_pos:0>10}");
+	let end_fragment_pos_value = format!("{end_fragment_pos:0>10}");
 
 	let mut replace_placeholder = |value_begin_idx: usize, header_value: &str| {
 		let value_end_idx = value_begin_idx + POS_PLACEHOLDER.len();
