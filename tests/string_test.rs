@@ -64,6 +64,8 @@ fn test_set_multiple_formats_is_one_item_macos() {
 
 	let ctx = ClipboardContext::new().unwrap();
 
+	ctx.clear().unwrap();
+
 	let test_plain_txt = "Hello Text";
 	let test_rich_txt = "{\\rtf1 Hello RTF}";
 	let test_html = "<h1>Hello HTML</h1>";
