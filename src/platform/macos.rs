@@ -6,7 +6,7 @@ use objc2::{rc::autoreleasepool, runtime::ProtocolObject};
 use objc2_app_kit::{
 	NSFilenamesPboardType, NSImage, NSPasteboard, NSPasteboardItem, NSPasteboardType,
 	NSPasteboardTypeHTML, NSPasteboardTypePNG, NSPasteboardTypeRTF, NSPasteboardTypeString,
-	NSPasteboardTypeTIFF, NSPasteboardWriting,
+	NSPasteboardTypeTIFF,
 };
 use objc2_foundation::{NSArray, NSData, NSString};
 use std::ffi::c_void;
@@ -131,68 +131,57 @@ impl ClipboardContext {
 			}
 		}
 		autoreleasepool(|_| unsafe {
-			let mut write_objects: Vec<
-				Retained<ProtocolObject<(dyn NSPasteboardWriting + 'static)>>,
-			> = vec![];
+			// we create one NSPasteboardItem for all representations of the same content
+			let item = NSPasteboardItem::new();
+			let mut has_content_other_than_files = false;
+
 			for d in data {
 				match d {
 					ClipboardContent::Text(text) => {
-						let item = NSPasteboardItem::new();
 						item.setString_forType(&NSString::from_str(text), NSPasteboardTypeString);
-						write_objects.push(ProtocolObject::from_retained(item));
+						has_content_other_than_files = true;
 					}
 					ClipboardContent::Rtf(rtf) => {
-						let item = NSPasteboardItem::new();
-						item.setString_forType(&NSString::from_str(rtf), NSPasteboardTypeRTF);
-						write_objects.push(ProtocolObject::from_retained(item));
+						let rtf_data =
+							NSData::dataWithBytes_length(rtf.as_ptr() as *const c_void, rtf.len());
+						item.setData_forType(&rtf_data, NSPasteboardTypeRTF);
+						has_content_other_than_files = true;
 					}
 					ClipboardContent::Html(html) => {
-						let item = NSPasteboardItem::new();
 						item.setString_forType(&NSString::from_str(html), NSPasteboardTypeHTML);
-						write_objects.push(ProtocolObject::from_retained(item));
+						has_content_other_than_files = true;
 					}
 					ClipboardContent::Image(image) => {
-						let png_img = image.to_png();
-						if let Ok(png_buffer) = png_img {
+						if let Ok(png_buffer) = image.to_png() {
 							let bytes = png_buffer.get_bytes();
-							let ns_data = {
-								NSData::initWithBytes_length(
-									NSData::alloc(),
-									bytes.as_ptr() as *mut c_void,
-									bytes.len(),
-								)
-							};
-							let item = NSPasteboardItem::new();
+							let ns_data = NSData::dataWithBytes_length(
+								bytes.as_ptr() as *mut c_void,
+								bytes.len(),
+							);
 							item.setData_forType(&ns_data, NSPasteboardTypePNG);
-							write_objects.push(ProtocolObject::from_retained(item));
+							has_content_other_than_files = true;
 						};
 					}
 					ClipboardContent::Files(files) => {
+						// Files are set seperately
 						let _ = self.set_files(files);
 					}
 					ClipboardContent::Other(format, buffer) => {
-						let ns_data = {
-							NSData::initWithBytes_length(
-								NSData::alloc(),
-								buffer.as_ptr() as *mut c_void,
-								buffer.len(),
-							)
-						};
-						self.pasteboard.declareTypes_owner(
-							&NSArray::from_retained_slice(&[NSString::from_str(format)]),
-							None,
+						let ns_data = NSData::dataWithBytes_length(
+							buffer.as_ptr() as *mut c_void,
+							buffer.len(),
 						);
-						let item = NSPasteboardItem::new();
 						item.setData_forType(&ns_data, &NSString::from_str(format));
-						write_objects.push(ProtocolObject::from_retained(item));
+						has_content_other_than_files = true;
 					}
 				}
 			}
-			if !self
-				.pasteboard
-				.writeObjects(&NSArray::from_retained_slice(&write_objects))
-			{
-				return Err("writeObjects failed");
+			if has_content_other_than_files {
+				let write_objects =
+					NSArray::from_retained_slice(&[ProtocolObject::from_retained(item)]);
+				if !self.pasteboard.writeObjects(&write_objects) {
+					return Err("writeObjects failed");
+				}
 			}
 			Ok(())
 		})?;
