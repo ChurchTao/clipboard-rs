@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.3.0 (2025-07-01) [released]
+
+- Add: Support iOS, but only for test, not for production.
+- Fix: Merge [pr#62](https://github.com/ChurchTao/clipboard-rs/pull/62)
+
 ## v0.2.4 (2025-02-07) [released]
 
 - Fix: [pr#56](https://github.com/ChurchTao/clipboard-rs/pull/56)
