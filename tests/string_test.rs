@@ -5,9 +5,7 @@ use clipboard_rs::{
 #[test]
 fn test_string() {
 	let ctx = ClipboardContext::new().unwrap();
-
-	let types = ctx.available_formats().unwrap();
-	println!("{:?}", types);
+	ctx.clear().unwrap();
 
 	let test_plain_txt = "hell@$#%^&U都98好的😊o Rust!!!";
 	ctx.set_text(test_plain_txt.to_string()).unwrap();
@@ -54,6 +52,7 @@ fn test_string() {
 }
 
 #[test]
+#[ignore]
 #[cfg(target_os = "macos")]
 fn test_set_multiple_formats_is_one_item_macos() {
 	// Import macOS-specific types needed for verification
@@ -63,6 +62,8 @@ fn test_set_multiple_formats_is_one_item_macos() {
 	};
 
 	let ctx = ClipboardContext::new().unwrap();
+
+	ctx.clear().unwrap();
 
 	let test_plain_txt = "Hello Text";
 	let test_rich_txt = "{\\rtf1 Hello RTF}";

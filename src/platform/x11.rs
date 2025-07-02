@@ -852,7 +852,7 @@ fn file_uri_list_to_clipboard_data(file_list: Vec<String>, atoms: Atoms) -> Vec<
 			if f.starts_with(FILE_PATH_PREFIX) {
 				f.to_owned()
 			} else {
-				format!("{}{}", FILE_PATH_PREFIX, f)
+				format!("{FILE_PATH_PREFIX}{f}")
 			}
 		})
 		.collect();
