@@ -75,7 +75,7 @@ impl ContentData for ClipboardContent {
 	}
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum ContentFormat {
 	Text,
 	Rtf,

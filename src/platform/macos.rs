@@ -187,6 +187,66 @@ impl ClipboardContext {
 		})?;
 		Ok(())
 	}
+
+	/// Get all content formats currently available in the clipboard
+	/// 获取剪贴板中当前可用的所有内容格式
+	pub fn get_current_formats(&self) -> Result<Vec<crate::ContentFormat>> {
+		use crate::{Clipboard, ContentFormat};
+		let mut formats = Vec::new();
+		
+		if self.has(ContentFormat::Text) {
+			formats.push(ContentFormat::Text);
+		}
+		if self.has(ContentFormat::Image) {
+			formats.push(ContentFormat::Image);
+		}
+		if self.has(ContentFormat::Html) {
+			formats.push(ContentFormat::Html);
+		}
+		if self.has(ContentFormat::Files) {
+			formats.push(ContentFormat::Files);
+		}
+		if self.has(ContentFormat::Rtf) {
+			formats.push(ContentFormat::Rtf);
+		}
+		
+		Ok(formats)
+	}
+
+	/// Check if clipboard contains text content
+	/// 检查剪贴板是否包含文本内容
+	pub fn has_text(&self) -> bool {
+		use crate::{Clipboard, ContentFormat};
+		self.has(ContentFormat::Text)
+	}
+
+	/// Check if clipboard contains image content
+	/// 检查剪贴板是否包含图像内容
+	pub fn has_image(&self) -> bool {
+		use crate::{Clipboard, ContentFormat};
+		self.has(ContentFormat::Image)
+	}
+
+	/// Check if clipboard contains file list
+	/// 检查剪贴板是否包含文件列表
+	pub fn has_files(&self) -> bool {
+		use crate::{Clipboard, ContentFormat};
+		self.has(ContentFormat::Files)
+	}
+
+	/// Check if clipboard contains HTML content
+	/// 检查剪贴板是否包含HTML内容
+	pub fn has_html(&self) -> bool {
+		use crate::{Clipboard, ContentFormat};
+		self.has(ContentFormat::Html)
+	}
+
+	/// Check if clipboard contains RTF content
+	/// 检查剪贴板是否包含RTF内容
+	pub fn has_rtf(&self) -> bool {
+		use crate::{Clipboard, ContentFormat};
+		self.has(ContentFormat::Rtf)
+	}
 }
 
 unsafe impl Send for ClipboardContext {}
