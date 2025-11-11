@@ -1,6 +1,7 @@
 use crate::{
-	common::Result,
+	common::{ClipboardError, Result},
 	// #[cfg(feature = "image")]
+	AsyncClipboard,
 	ClipboardContent,
 	ClipboardHandler,
 	ContentFormat,
@@ -80,6 +81,85 @@ pub struct ClipboardContext {
 	read_timeout: Option<Duration>,
 }
 
+#[async_trait::async_trait]
+impl AsyncClipboard for ClipboardContext {
+	async fn available_formats(&self) -> Result<Vec<String>> {
+		self.available_formats()
+	}
+
+	async fn has(&self, format: ContentFormat) -> Result<bool> {
+		Ok(self.has(format))
+	}
+
+	async fn clear(&self) -> Result<()> {
+		self.clear()
+	}
+
+	async fn get_buffer(&self, format: &str) -> Result<Vec<u8>> {
+		self.get_buffer(format)
+	}
+
+	async fn get_text(&self) -> Result<String> {
+		self.get_text()
+	}
+
+	async fn get_rtf(&self) -> Result<String> {
+		// Linux 平台没有直接的 RTF 支持，返回空字符串
+		Ok(String::new())
+	}
+
+	async fn get_html(&self) -> Result<String> {
+		self.get_html()
+	}
+
+	#[cfg(feature = "image")]
+	async fn get_image(&self) -> Result<RustImageData> {
+		self.get_image()
+	}
+
+	async fn get_files(&self) -> Result<Vec<String>> {
+		self.get_files()
+	}
+
+	async fn get(&self, formats: &[ContentFormat]) -> Result<Vec<ClipboardContent>> {
+		self.get(formats)
+	}
+
+	async fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
+		self.set_buffer(format, buffer)
+	}
+
+	async fn set_text(&self, text: &str) -> Result<()> {
+		self.set_text(text.to_string())
+	}
+
+	async fn set_rtf(&self, rtf: &str) -> Result<()> {
+		// Linux 平台没有直接的 RTF 支持，忽略设置
+		Ok(())
+	}
+
+	async fn set_html(&self, html: &str) -> Result<()> {
+		self.set_html(html.to_string())
+	}
+
+	#[cfg(feature = "image")]
+	async fn set_image(&self, image: RustImageData) -> Result<()> {
+		self.set_image(image)
+	}
+
+	async fn set_files(&self, files: &[String]) -> Result<()> {
+		self.set_files(files.to_vec())
+	}
+
+	async fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
+		self.set(contents)
+	}
+
+	async fn set_with_builder(&self, builder: ClipboardContentBuilder) -> Result<()> {
+		self.set(builder.build())
+	}
+}
+
 struct ClipboardData {
 	format: Atom,
 	data: Vec<u8>,
@@ -140,7 +220,7 @@ impl InnerContext {
 					)?;
 					success = true;
 				}
-				Err(_) => return Err("Failed to read clipboard data".into()),
+				Err(_) => return Err(ClipboardError::PlatformError("Failed to read clipboard data".into())),
 			}
 		} else {
 			let reader = self.wait_write_data.read();
@@ -160,7 +240,7 @@ impl InnerContext {
 						None => false,
 					};
 				}
-				Err(_) => return Err("Failed to read clipboard data".into()),
+				Err(_) => return Err(ClipboardError::PlatformError("Failed to read clipboard data".into())),
 			}
 		}
 		// on failure, we notify the requester of it
@@ -213,7 +293,7 @@ impl InnerContext {
 				.map(|(timeout, time)| (Instant::now() - time) >= timeout)
 				.unwrap_or(false)
 			{
-				return Err("Timeout while waiting for clipboard data".into());
+				return Err(ClipboardError::Timeout);
 			}
 
 			let (event, seq) = match ctx.conn.poll_for_event_with_sequence()? {
@@ -264,7 +344,7 @@ impl InnerContext {
 						is_incr = true;
 						continue;
 					} else if reply.type_ != target && reply.type_ != atoms.ATOM {
-						return Err("Clipboard data type mismatch".into());
+						return Err(ClipboardError::InvalidData("Clipboard data type mismatch".into()));
 					}
 					buff.extend_from_slice(&reply.value);
 					break;
@@ -368,7 +448,7 @@ impl ClipboardContext {
 				writer.clear();
 				writer.extend(data);
 			}
-			Err(_) => return Err("Failed to write clipboard data".into()),
+			Err(_) => return Err(ClipboardError::PlatformError("Failed to write clipboard data".into())),
 		}
 		let ctx = &self.inner.server_for_write;
 		let atoms = ctx.atoms;
@@ -388,7 +468,7 @@ impl ClipboardContext {
 		{
 			Ok(())
 		} else {
-			Err("Failed to take ownership of the clipboard".into())
+			Err(ClipboardError::PlatformError("Failed to take ownership of the clipboard".into()))
 		}
 	}
 }
@@ -400,7 +480,7 @@ fn process_server_req(context: &InnerContext) -> Result<()> {
 			.server_for_write
 			.conn
 			.wait_for_event()
-			.map_err(|e| format!("wait_for_event error: {e:?}"))?
+			.map_err(|e| ClipboardError::PlatformError(format!("wait_for_event error: {e:?}")))?
 		{
 			Event::DestroyNotify(_) => {
 				// This window is being destroyed.
@@ -417,14 +497,14 @@ fn process_server_req(context: &InnerContext) -> Result<()> {
 						.wait_write_data
 						.write()
 						.map(|mut writer| writer.clear())
-						.map_err(|e| format!("write clipboard data error: {e:?}"))?;
+						.map_err(|e| ClipboardError::PlatformError(format!("write clipboard data error: {e:?}")))?;
 				}
 			}
 			Event::SelectionRequest(event) => {
 				// Someone is requesting the clipboard content from us.
 				context
 					.handle_selection_request(event)
-					.map_err(|e| format!("handle_selection_request error: {e:?}"))?;
+					.map_err(|e| ClipboardError::PlatformError(format!("handle_selection_request error: {e:?}")))?;
 			}
 			Event::SelectionNotify(event) => {
 				// We've requested the clipboard content and this is the answer.
@@ -497,7 +577,7 @@ impl Clipboard for ClipboardContext {
 		let atom = self.inner.server.get_atom(format);
 		match atom {
 			Ok(atom) => self.read(&atom),
-			Err(_) => Err("Invalid format".into()),
+			Err(_) => Err(ClipboardError::InvalidData("Invalid format".into())),
 		}
 	}
 
@@ -537,10 +617,10 @@ impl Clipboard for ClipboardContext {
 				let image = RustImageData::from_bytes(&bytes);
 				match image {
 					Ok(image) => Ok(image),
-					Err(_) => Err("Invalid image data".into()),
+					Err(_) => Err(ClipboardError::InvalidData("Invalid image data".into())),
 				}
 			}
-			Err(_) => Err("No image data found".into()),
+			Err(_) => Err(ClipboardError::Empty),
 		}
 	}
 

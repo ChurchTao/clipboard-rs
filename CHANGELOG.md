@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.4.0 (2025-11-11) [released]
+
+### Added
+- Modern async API with `AsyncClipboard` trait
+- High-level `ClipboardManager` for simplified usage
+- Fluent `ClipboardContentBuilder` for constructing complex clipboard content
+- Modern error handling with `thiserror` crate
+- New `async-image` feature with background thread support for image processing
+- Modern examples demonstrating the new APIs
+
+### Changed
+- Improved error types with structured `ClipboardError` enum
+- Updated all platform implementations to use the new error handling
+- Enhanced image processing capabilities with async support
+- Modernized documentation and examples
+
+### Breaking Changes
+- Error handling now uses `ClipboardError` instead of `Box<dyn Error>`
+- Some method names changed (e.g., `get_rich_text` → `get_rtf` in new API)
+
 ## v0.3.1 (2025-11-11) [released]
 
 - Merge pull request [#69](https://github.com/ChurchTao/clipboard-rs/pull/69) from Ciubix8513/master

@@ -1,7 +1,7 @@
-use crate::common::Result;
+use crate::common::{ClipboardError, Result};
 #[cfg(feature = "image")]
 use crate::common::{RustImage, RustImageData};
-use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
+use crate::{AsyncClipboard, Clipboard, ClipboardContent, ClipboardContentBuilder, ClipboardHandler, ClipboardWatcher, ContentFormat};
 use objc2::rc::Retained;
 use objc2::AllocAnyThread;
 use objc2::ClassType;
@@ -105,13 +105,13 @@ impl ClipboardContext {
 			let contents = self
 				.pasteboard
 				.pasteboardItems()
-				.ok_or("NSPasteboard#pasteboardItems errored")?;
+				.ok_or(ClipboardError::PlatformError("NSPasteboard#pasteboardItems errored".into()))?;
 			for item in contents {
 				if let Some(string) = item.stringForType(r#type) {
 					return Ok(string.to_string());
 				}
 			}
-			Err("No string found".into())
+			Err(ClipboardError::Empty)
 		})
 	}
 
@@ -137,7 +137,7 @@ impl ClipboardContext {
 				})
 				.collect();
 			if urls.is_empty() {
-				return Err("no valid files".into());
+				return Err(ClipboardError::InvalidData("no valid files".into()));
 			}
 			let write_objects = NSArray::from_retained_slice(
 				&urls
@@ -146,7 +146,7 @@ impl ClipboardContext {
 					.collect::<Vec<_>>(),
 			);
 			if !self.pasteboard.writeObjects(&write_objects) {
-				return Err("writeObjects failed for files".into());
+				return Err(ClipboardError::PlatformError("writeObjects failed for files".into()));
 			}
 			Ok(())
 		})
@@ -217,7 +217,7 @@ impl ClipboardContext {
 				let write_objects =
 					NSArray::from_retained_slice(&[ProtocolObject::from_retained(item)]);
 				if !self.pasteboard.writeObjects(&write_objects) {
-					return Err("writeObjects failed");
+					return Err(ClipboardError::PlatformError("writeObjects failed".into()));
 				}
 			}
 			Ok(())
@@ -228,6 +228,83 @@ impl ClipboardContext {
 
 unsafe impl Send for ClipboardContext {}
 
+#[async_trait::async_trait]
+impl AsyncClipboard for ClipboardContext {
+	async fn available_formats(&self) -> Result<Vec<String>> {
+		Clipboard::available_formats(self)
+	}
+
+	async fn has(&self, format: ContentFormat) -> Result<bool> {
+		Ok(Clipboard::has(self, format))
+	}
+
+	async fn clear(&self) -> Result<()> {
+		Clipboard::clear(self)
+	}
+
+	async fn get_buffer(&self, format: &str) -> Result<Vec<u8>> {
+		Clipboard::get_buffer(self, format)
+	}
+
+	async fn get_text(&self) -> Result<String> {
+		Clipboard::get_text(self)
+	}
+
+	async fn get_rtf(&self) -> Result<String> {
+		Clipboard::get_rich_text(self)
+	}
+
+	async fn get_html(&self) -> Result<String> {
+		Clipboard::get_html(self)
+	}
+
+	#[cfg(feature = "image")]
+	async fn get_image(&self) -> Result<RustImageData> {
+		Clipboard::get_image(self)
+	}
+
+	async fn get_files(&self) -> Result<Vec<String>> {
+		Clipboard::get_files(self)
+	}
+
+	async fn get(&self, formats: &[ContentFormat]) -> Result<Vec<ClipboardContent>> {
+		Clipboard::get(self, formats)
+	}
+
+	async fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
+		Clipboard::set_buffer(self, format, buffer)
+	}
+
+	async fn set_text(&self, text: &str) -> Result<()> {
+		Clipboard::set_text(self, text.to_string())
+	}
+
+	async fn set_rtf(&self, rtf: &str) -> Result<()> {
+		Clipboard::set_rich_text(self, rtf.to_string())
+	}
+
+	async fn set_html(&self, html: &str) -> Result<()> {
+		Clipboard::set_html(self, html.to_string())
+	}
+
+	#[cfg(feature = "image")]
+	async fn set_image(&self, image: RustImageData) -> Result<()> {
+		Clipboard::set_image(self, image)
+	}
+
+	async fn set_files(&self, files: &[String]) -> Result<()> {
+		Clipboard::set_files(self, files.to_vec())
+	}
+
+	async fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
+		Clipboard::set(self, contents)
+	}
+
+	async fn set_with_builder(&self, builder: ClipboardContentBuilder) -> Result<()> {
+		Clipboard::set(self, builder.build())
+	}
+}
+
 unsafe impl Sync for ClipboardContext {}
 
 impl Clipboard for ClipboardContext {
@@ -235,7 +312,7 @@ impl Clipboard for ClipboardContext {
 		let types = self
 			.pasteboard
 			.types()
-			.ok_or("NSPasteboard#types errored")?;
+			.ok_or(ClipboardError::PlatformError("NSPasteboard#types errored".into()))?;
 		let res = types.iter().map(|t| t.to_string()).collect();
 		Ok(res)
 	}
@@ -287,7 +364,7 @@ impl Clipboard for ClipboardContext {
 		if let Some(data) = self.pasteboard.dataForType(&NSString::from_str(format)) {
 			return Ok(data.to_vec());
 		}
-		Err("no data".into())
+		Err(ClipboardError::Empty)
 	}
 
 	fn get_text(&self) -> Result<String> {
@@ -317,7 +394,7 @@ impl Clipboard for ClipboardContext {
 					return RustImageData::from_bytes(&data.to_vec());
 				}
 			};
-			Err("no image data".into())
+			Err(ClipboardError::Empty)
 		})
 	}
 
@@ -359,7 +436,7 @@ impl Clipboard for ClipboardContext {
 				}
 			}
 			if res.is_empty() {
-				return Err("no files".into());
+				return Err(ClipboardError::Empty);
 			}
 			Ok(res)
 		})
@@ -370,7 +447,7 @@ impl Clipboard for ClipboardContext {
 			let contents = self
 				.pasteboard
 				.pasteboardItems()
-				.ok_or("NSPasteboard#pasteboardItems errored")?;
+				.ok_or(ClipboardError::PlatformError("NSPasteboard#pasteboardItems errored".into()))?;
 			let mut results = Vec::new();
 			for format in formats {
 				for item in contents.iter() {
@@ -400,13 +477,13 @@ impl Clipboard for ClipboardContext {
 						}
 						#[cfg(feature = "image")]
 						ContentFormat::Image => {
-							if let Ok(image) = self.get_image() {
+							if let Ok(image) = Clipboard::get_image(self) {
 								results.push(ClipboardContent::Image(image));
 								break;
 							}
 						}
 						ContentFormat::Files => {
-							if let Ok(files) = self.get_files() {
+							if let Ok(files) = Clipboard::get_files(self) {
 								results.push(ClipboardContent::Files(files));
 								break;
 							}
@@ -450,16 +527,16 @@ impl Clipboard for ClipboardContext {
 
 	fn set_files(&self, files: Vec<String>) -> Result<()> {
 		if files.is_empty() {
-			return Err("file list is empty".into());
+			return Err(ClipboardError::InvalidData("file list is empty".into()));
 		}
-		let _ = self.clear();
+		let _ = Clipboard::clear(self);
 		self.set_files(&files)
 	}
 
 	fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
 		if contents.is_empty() {
 			return Err(
-				"contents is empty, if you want to clear clipboard, please use clear method".into(),
+				ClipboardError::InvalidData("contents is empty, if you want to clear clipboard, please use clear method".into()),
 			);
 		}
 		self.write_to_clipboard(&contents, true)

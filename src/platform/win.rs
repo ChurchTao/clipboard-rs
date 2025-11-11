@@ -4,10 +4,10 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 use std::{mem, ptr, thread};
 
-use crate::common::{ContentData, Result};
+use crate::common::{ClipboardError, ContentData, Result};
 #[cfg(feature = "image")]
 use crate::common::{RustImage, RustImageData};
-use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
+use crate::{AsyncClipboard, Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
 use clipboard_win::raw::{set_file_list_with, set_string_with, set_without_clear};
 use clipboard_win::types::c_uint;
 use clipboard_win::{
@@ -71,7 +71,7 @@ impl ClipboardContext {
 		};
 		Ok(ClipboardContext {
 			format_map,
-			html_format: html_format.ok_or("register html format error")?,
+			html_format: html_format.ok_or(ClipboardError::PlatformError("register html format error".into()))?,
 		})
 	}
 
@@ -103,7 +103,7 @@ impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 impl Clipboard for ClipboardContext {
 	fn available_formats(&self) -> Result<Vec<String>> {
 		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| format!("Open clipboard error, code = {code}"));
+			.map_err(|code| ClipboardError::PlatformError(format!("Open clipboard error, code = {code}")))?;
 		let format_count = clipboard_win::count_formats();
 		if format_count.is_none() {
 			return Ok(Vec::new());
@@ -153,10 +153,10 @@ impl Clipboard for ClipboardContext {
 
 	fn clear(&self) -> Result<()> {
 		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| format!("Open clipboard error, code = {code}"));
+			.map_err(|code| ClipboardError::PlatformError(format!("Open clipboard error, code = {code}")))?;
 		let res = clipboard_win::empty();
 		if let Err(e) = res {
-			return Err(format!("Empty clipboard error, code = {e}").into());
+			return Err(ClipboardError::PlatformError(format!("Empty clipboard error, code = {e}")));
 		}
 		Ok(())
 	}
@@ -164,13 +164,13 @@ impl Clipboard for ClipboardContext {
 	fn get_buffer(&self, format: &str) -> Result<Vec<u8>> {
 		let format_uint = clipboard_win::register_format(format);
 		if format_uint.is_none() {
-			return Err("register format error".into());
+			return Err(ClipboardError::PlatformError("register format error".into()));
 		}
 		let format_uint = format_uint.unwrap().get();
 		let buffer = get_clipboard(formats::RawData(format_uint));
 		match buffer {
 			Ok(data) => Ok(data),
-			Err(e) => Err(format!("Get buffer error, code = {e}").into()),
+			Err(e) => Err(ClipboardError::PlatformError(format!("Get buffer error, code = {e}"))),
 		}
 	}
 
@@ -178,7 +178,7 @@ impl Clipboard for ClipboardContext {
 		let string: SysResult<String> = get_clipboard(formats::Unicode);
 		match string {
 			Ok(s) => Ok(s),
-			Err(e) => Err(format!("Get text error, code = {e}").into()),
+			Err(e) => Err(ClipboardError::PlatformError(format!("Get text error, code = {e}"))),
 		}
 	}
 
@@ -198,9 +198,9 @@ impl Clipboard for ClipboardContext {
 						return Ok(html);
 					}
 				}
-				Err("Get html error".into())
+				Err(ClipboardError::Empty)
 			}
-			Err(e) => Err(format!("Get buffer error, code = {e}").into()),
+			Err(e) => Err(ClipboardError::PlatformError(format!("Get buffer error, code = {e}"))),
 		}
 	}
 
@@ -226,16 +226,16 @@ impl Clipboard for ClipboardContext {
 						DynamicImage::from_decoder(decoder).map_err(|e| format!("{e}"))?;
 					Ok(RustImageData::from_dynamic_image(dynamic_image))
 				}
-				Err(e) => Err(format!("Get image error, code = {e}").into()),
+				Err(e) => Err(ClipboardError::PlatformError(format!("Get image error, code = {e}"))),
 			}
 		} else if clipboard_win::is_format_avail(formats::CF_DIB) {
 			let res = get_clipboard(formats::Bitmap);
 			match res {
 				Ok(data) => RustImageData::from_bytes(&data),
-				Err(e) => Err(format!("Get image error, code = {e}").into()),
+				Err(e) => Err(ClipboardError::PlatformError(format!("Get image error, code = {e}"))),
 			}
 		} else {
-			Err("No image data in clipboard".into())
+			Err(ClipboardError::Empty)
 		}
 	}
 
@@ -243,13 +243,13 @@ impl Clipboard for ClipboardContext {
 		let files: SysResult<Vec<String>> = get_clipboard(formats::FileList);
 		match files {
 			Ok(f) => Ok(f),
-			Err(e) => Err(format!("Get files error, code = {e}").into()),
+			Err(e) => Err(ClipboardError::PlatformError(format!("Get files error, code = {e}"))),
 		}
 	}
 
 	fn get(&self, formats: &[ContentFormat]) -> Result<Vec<ClipboardContent>> {
 		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| format!("Open clipboard error, code = {code}"));
+			.map_err(|code| ClipboardError::PlatformError(format!("Open clipboard error, code = {code}")))?;
 		let mut res = Vec::new();
 		for format in formats {
 			match format {
@@ -325,24 +325,24 @@ impl Clipboard for ClipboardContext {
 	fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
 		let format_uint = clipboard_win::register_format(format);
 		if format_uint.is_none() {
-			return Err("register format error".into());
+			return Err(ClipboardError::PlatformError("register format error".into()));
 		}
 		let format_uint = format_uint.unwrap().get();
 		let res = set_clipboard(formats::RawData(format_uint), buffer);
 		if res.is_err() {
-			return Err("set buffer error".into());
+			return Err(ClipboardError::PlatformError("set buffer error".into()));
 		}
 		Ok(())
 	}
 
 	fn set_text(&self, text: String) -> Result<()> {
 		let res = set_clipboard(formats::Unicode, text);
-		res.map_err(|e| format!("set text error, code = {e}").into())
+		res.map_err(|e| ClipboardError::PlatformError(format!("set text error, code = {e}")))
 	}
 
 	fn set_rich_text(&self, text: String) -> Result<()> {
 		let res = self.set_buffer(CF_RTF, text.as_bytes().to_vec());
-		res.map_err(|e| format!("set rich text error, code = {e}").into())
+		res.map_err(|e| ClipboardError::PlatformError(format!("set rich text error, code = {e}")))
 	}
 
 	fn set_html(&self, html: String) -> Result<()> {
@@ -351,16 +351,16 @@ impl Clipboard for ClipboardContext {
 			formats::RawData(self.html_format.code()),
 			cf_html.as_bytes(),
 		);
-		res.map_err(|e| format!("set html error, code = {e}").into())
+		res.map_err(|e| ClipboardError::PlatformError(format!("set html error, code = {e}")))
 	}
 
 	#[cfg(feature = "image")]
 	fn set_image(&self, image: RustImageData) -> Result<()> {
 		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| format!("Open clipboard error, code = {code}"));
+			.map_err(|code| ClipboardError::PlatformError(format!("Open clipboard error, code = {code}")))?;
 		let res = clipboard_win::empty();
 		if let Err(e) = res {
-			return Err(format!("Empty clipboard error, code = {e}").into());
+			return Err(ClipboardError::PlatformError(format!("Empty clipboard error, code = {e}")));
 		}
 		// chromium source code
 		// @link {https://source.chromium.org/chromium/chromium/src/+/main:ui/base/clipboard/clipboard_win.cc;l=771;drc=2a5aaed0ff3a0895c8551495c2656ed49baf742c;bpv=0;bpt=1}
@@ -375,24 +375,24 @@ impl Clipboard for ClipboardContext {
 		// 转换为 BMP 并设置到剪贴板
 		let bmp = image
 			.to_bitmap()
-			.map_err(|e| format!("transform to bitmap error, code = {e}"))?;
+			.map_err(|e| ClipboardError::PlatformError(format!("transform to bitmap error, code = {e}")))?;
 
-		set_bitmap_inner(bmp.get_bytes()).map_err(|e| format!("set image error, code = {e}").into())
+		set_bitmap_inner(bmp.get_bytes()).map_err(|e| ClipboardError::PlatformError(format!("set image error, code = {e}")))
 	}
 
 	fn set_files(&self, files: Vec<String>) -> Result<()> {
 		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| format!("Open clipboard error, code = {code}"));
+			.map_err(|code| ClipboardError::PlatformError(format!("Open clipboard error, code = {code}")))?;
 		let res = set_file_list_with(&files, options::DoClear);
-		res.map_err(|e| format!("set files error, code = {e}").into())
+		res.map_err(|e| ClipboardError::PlatformError(format!("set files error, code = {e}")))
 	}
 
 	fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
 		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| format!("Open clipboard error, code = {code}"));
+			.map_err(|code| ClipboardError::PlatformError(format!("Open clipboard error, code = {code}")))?;
 		let res = clipboard_win::empty();
 		if let Err(e) = res {
-			return Err(format!("Empty clipboard error, code = {e}").into());
+			return Err(ClipboardError::PlatformError(format!("Empty clipboard error, code = {e}")));
 		}
 		for content in contents {
 			match content {
@@ -701,5 +701,82 @@ impl DeviceContext {
 impl Drop for DeviceContext {
 	fn drop(&mut self) {
 		unsafe { ReleaseDC(Some(HWND::default()), self.0) };
+	}
+}
+
+#[async_trait::async_trait]
+impl AsyncClipboard for ClipboardContext {
+	async fn available_formats(&self) -> Result<Vec<String>> {
+		self.available_formats()
+	}
+
+	async fn has(&self, format: ContentFormat) -> Result<bool> {
+		Ok(self.has(format))
+	}
+
+	async fn clear(&self) -> Result<()> {
+		self.clear()
+	}
+
+	async fn get_buffer(&self, format: &str) -> Result<Vec<u8>> {
+		self.get_buffer(format)
+	}
+
+	async fn get_text(&self) -> Result<String> {
+		self.get_text()
+	}
+
+	async fn get_rtf(&self) -> Result<String> {
+		self.get_rich_text()
+	}
+
+	async fn get_html(&self) -> Result<String> {
+		self.get_html()
+	}
+
+	#[cfg(feature = "image")]
+	async fn get_image(&self) -> Result<RustImageData> {
+		self.get_image()
+	}
+
+	async fn get_files(&self) -> Result<Vec<String>> {
+		self.get_files()
+	}
+
+	async fn get(&self, formats: &[ContentFormat]) -> Result<Vec<ClipboardContent>> {
+		self.get(formats)
+	}
+
+	async fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
+		self.set_buffer(format, buffer)
+	}
+
+	async fn set_text(&self, text: &str) -> Result<()> {
+		self.set_text(text.to_string())
+	}
+
+	async fn set_rtf(&self, rtf: &str) -> Result<()> {
+		self.set_rich_text(rtf.to_string())
+	}
+
+	async fn set_html(&self, html: &str) -> Result<()> {
+		self.set_html(html.to_string())
+	}
+
+	#[cfg(feature = "image")]
+	async fn set_image(&self, image: RustImageData) -> Result<()> {
+		self.set_image(image)
+	}
+
+	async fn set_files(&self, files: &[String]) -> Result<()> {
+		self.set_files(files.to_vec())
+	}
+
+	async fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
+		self.set(contents)
+	}
+
+	async fn set_with_builder(&self, builder: ClipboardContentBuilder) -> Result<()> {
+		self.set(builder.build())
 	}
 }

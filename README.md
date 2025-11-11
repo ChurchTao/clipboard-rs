@@ -19,6 +19,12 @@ clipboard-rs is a cross-platform library written in Rust for getting and setting
 - File (In `file-uri-list` format)
 - Any type (by specifying the type identifier) can be obtained through the `available_formats` method
 
+## Features
+
+- `default` - Enable image support
+- `image` - Enable basic image support
+- `async-image` - Enable modern async image processing with background thread support
+
 ### Platform Support Type Comparison Table
 
 | Type          | Windows              | macOS               | Linux(X11) | iOS(Beta) | Android(WIP) |
@@ -56,7 +62,7 @@ clipboard-rs = "0.3.1"
 
 [Examples](examples)
 
-### Simple Read and Write
+### Simple Read and Write (Legacy API)
 
 ```rust
 use clipboard_rs::{Clipboard, ClipboardContext, ContentFormat};
@@ -85,6 +91,48 @@ fn main() {
 	println!("txt={}", content);
 }
 
+```
+
+### Simple Read and Write (Modern Async API)
+
+```rust
+use clipboard_rs::{ClipboardManager, ContentFormat};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let clipboard = ClipboardManager::new().await?;
+
+    let formats = clipboard.available_formats().await?;
+    println!("Available formats: {:?}", formats);
+
+    let has_rtf = clipboard.has(ContentFormat::Rtf).await?;
+    println!("has_rtf={}", has_rtf);
+
+    let rtf = clipboard.get_rtf().await.unwrap_or_default();
+    println!("rtf={}", rtf);
+
+    let has_html = clipboard.has(ContentFormat::Html).await?;
+    println!("has_html={}", has_html);
+
+    let html = clipboard.get_html().await.unwrap_or_default();
+    println!("html={}", html);
+
+    let content = clipboard.get_text().await.unwrap_or_default();
+    println!("txt={}", content);
+
+    // Using the fluent builder API
+    clipboard
+        .set_with_builder(
+            clipboard
+                .build_content()
+                .with_text("Hello, World!")
+                .with_html("<h1>Hello, World!</h1>")
+                .with_rtf(r"{\rtf1\ansi\b Hello, World!}")
+        )
+        .await?;
+
+    Ok(())
+}
 ```
 
 ### Reading Images
@@ -116,6 +164,71 @@ fn main() {
 			println!("err={}", err);
 		}
 	}
+}
+```
+
+### Reading Images (Modern Async API)
+
+To use the modern async image API, enable the `async-image` feature:
+
+```bash
+cargo run --example image_modern --features async-image
+```
+
+```rust
+//! Modern image processing example
+//! Requires async-image feature: `cargo run --example image_modern --features async-image`
+
+#[cfg(feature = "async-image")]
+use clipboard_rs::{ClipboardImage, ClipboardManager};
+
+#[cfg(feature = "async-image")]
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create new clipboard manager
+    let clipboard = ClipboardManager::new().await?;
+
+    // Create a simple image
+    let mut image_buffer = image::RgbImage::new(100, 100);
+
+    // Draw a red square
+    for x in 0..50 {
+        for y in 0..50 {
+            image_buffer.put_pixel(x, y, image::Rgb([255, 0, 0]));
+        }
+    }
+
+    // Convert to ClipboardImage
+    let clipboard_image = clipboard_rs::ClipboardImage::from_dynamic_image(
+        image::DynamicImage::ImageRgb8(image_buffer)
+    );
+
+    // Set image to clipboard
+    clipboard.set_image(clipboard_image).await?;
+    println!("Image set to clipboard successfully!");
+
+    // Get image from clipboard
+    match clipboard.get_image().await {
+        Ok(image) => {
+            println!("Got image from clipboard!");
+            println!("Image dimensions: {:?}", image.dimensions());
+
+            // Save image to file
+            image.save_to_path("clipboard_image.png").await?;
+            println!("Image saved to clipboard_image.png");
+        }
+        Err(e) => {
+            println!("Failed to get image from clipboard: {}", e);
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(not(feature = "async-image"))]
+fn main() {
+    println!("This example requires the 'async-image' feature to be enabled.");
+    println!("Run with: cargo run --example image_modern --features async-image");
 }
 
 ```

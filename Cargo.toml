@@ -1,6 +1,6 @@
 [package]
 name = "clipboard-rs"
-version = "0.3.1"
+version = "0.4.0"
 authors = ["ChurchTao <swkzymlyy@gmail.com>"]
 description = "Cross-platform clipboard API (text | image | rich text | html | files | monitoring changes) | 跨平台剪贴板 API(文本|图片|富文本|html|文件|监听变化) Windows,MacOS,Linux"
 repository = "https://github.com/ChurchTao/clipboard-rs"
@@ -13,13 +13,28 @@ rust-version = "1.67.0"
 
 [features]
 image = ["dep:image"]
+async-image = ["dep:tokio", "image"]
 default = ["image"]
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["rt-multi-thread", "sync", "macros"] }
 
 [[example]]
 name = "image"
 required-features = ["image"]
 
+[[example]]
+name = "modern"
+required-features = ["async-image"]
+
+[[example]]
+name = "image_modern"
+required-features = ["async-image"]
+
 [dependencies]
+thiserror = "2"
+async-trait = "0.1"
+tokio = { version = "1.0", features = ["rt", "sync"], optional = true }
 image = { version = "0.25.5", optional = true, default-features = false, features = [
     "png",
     "jpeg",
