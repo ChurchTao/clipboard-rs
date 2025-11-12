@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-	use clipboard_rs::{ClipboardManager, common::ContentFormat};
+	use clipboard_rs::{common::ContentFormat, ClipboardManager};
 
 	#[tokio::test]
 	async fn test_async_string() {

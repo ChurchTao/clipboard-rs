@@ -7,30 +7,30 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum ClipboardError {
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+	#[error("IO error: {0}")]
+	Io(#[from] std::io::Error),
 
-    #[cfg(feature = "image")]
-    #[error("Image error: {0}")]
-    Image(#[from] image::ImageError),
+	#[cfg(feature = "image")]
+	#[error("Image error: {0}")]
+	Image(#[from] image::ImageError),
 
-    #[error("Clipboard is empty")]
-    Empty,
+	#[error("Clipboard is empty")]
+	Empty,
 
-    #[error("Unsupported format: {0}")]
-    UnsupportedFormat(String),
+	#[error("Unsupported format: {0}")]
+	UnsupportedFormat(String),
 
-    #[error("Platform specific error: {0}")]
-    PlatformError(String),
+	#[error("Platform specific error: {0}")]
+	PlatformError(String),
 
-    #[error("Invalid data: {0}")]
-    InvalidData(String),
+	#[error("Invalid data: {0}")]
+	InvalidData(String),
 
-    #[error("Clipboard operation timeout")]
-    Timeout,
+	#[error("Clipboard operation timeout")]
+	Timeout,
 
-    #[error("Permission denied")]
-    PermissionDenied,
+	#[error("Permission denied")]
+	PermissionDenied,
 }
 
 pub type Result<T> = std::result::Result<T, ClipboardError>;
@@ -72,19 +72,22 @@ impl ClipboardContentBuilder {
 
 	/// 添加纯文本内容
 	pub fn with_text(mut self, text: impl AsRef<str>) -> Self {
-		self.contents.push(ClipboardContent::Text(text.as_ref().to_string()));
+		self.contents
+			.push(ClipboardContent::Text(text.as_ref().to_string()));
 		self
 	}
 
 	/// 添加 HTML 内容
 	pub fn with_html(mut self, html: impl AsRef<str>) -> Self {
-		self.contents.push(ClipboardContent::Html(html.as_ref().to_string()));
+		self.contents
+			.push(ClipboardContent::Html(html.as_ref().to_string()));
 		self
 	}
 
 	/// 添加 RTF 内容
 	pub fn with_rtf(mut self, rtf: impl AsRef<str>) -> Self {
-		self.contents.push(ClipboardContent::Rtf(rtf.as_ref().to_string()));
+		self.contents
+			.push(ClipboardContent::Rtf(rtf.as_ref().to_string()));
 		self
 	}
 
@@ -104,7 +107,8 @@ impl ClipboardContentBuilder {
 
 	/// 添加自定义格式内容
 	pub fn with_custom(mut self, format: impl AsRef<str>, data: Vec<u8>) -> Self {
-		self.contents.push(ClipboardContent::Other(format.as_ref().to_string(), data));
+		self.contents
+			.push(ClipboardContent::Other(format.as_ref().to_string(), data));
 		self
 	}
 
@@ -153,7 +157,9 @@ impl ContentData for ClipboardContent {
 			ClipboardContent::Rtf(data) => Ok(data),
 			ClipboardContent::Html(data) => Ok(data),
 			#[cfg(feature = "image")]
-			ClipboardContent::Image(_) => Err(ClipboardError::InvalidData("can't convert image to string".into())),
+			ClipboardContent::Image(_) => Err(ClipboardError::InvalidData(
+				"can't convert image to string".into(),
+			)),
 			ClipboardContent::Files(data) => {
 				// use first file path as data
 				if let Some(path) = data.first() {
@@ -162,7 +168,9 @@ impl ContentData for ClipboardContent {
 					Err(ClipboardError::Empty)
 				}
 			}
-			ClipboardContent::Other(_, data) => std::str::from_utf8(data).map_err(|e| ClipboardError::InvalidData(e.to_string())),
+			ClipboardContent::Other(_, data) => {
+				std::str::from_utf8(data).map_err(|e| ClipboardError::InvalidData(e.to_string()))
+			}
 		}
 	}
 }
@@ -199,7 +207,9 @@ impl ClipboardImage {
 		// 在后台线程中加载图像以避免阻塞
 		let image = tokio::task::spawn_blocking(move || {
 			image::open(&path).map_err(|e| ClipboardError::Image(e))
-		}).await.map_err(|e| ClipboardError::Io(e.into()))??;
+		})
+		.await
+		.map_err(|e| ClipboardError::Io(e.into()))??;
 
 		Ok(ClipboardImage { inner: image })
 	}
@@ -210,7 +220,9 @@ impl ClipboardImage {
 		// 在后台线程中加载图像以避免阻塞
 		let image = tokio::task::spawn_blocking(move || {
 			image::load_from_memory(&bytes).map_err(|e| ClipboardError::InvalidData(e.to_string()))
-		}).await.map_err(|e| ClipboardError::Io(e.into()))??;
+		})
+		.await
+		.map_err(|e| ClipboardError::Io(e.into()))??;
 
 		Ok(ClipboardImage { inner: image })
 	}
@@ -238,9 +250,9 @@ impl ClipboardImage {
 	/// 缩略图处理
 	pub async fn thumbnail(&self, width: u32, height: u32) -> Result<Self> {
 		let image = self.inner.clone();
-		let thumbnail = tokio::task::spawn_blocking(move || {
-			image.thumbnail(width, height)
-		}).await.map_err(|e| ClipboardError::Io(e.into()))?;
+		let thumbnail = tokio::task::spawn_blocking(move || image.thumbnail(width, height))
+			.await
+			.map_err(|e| ClipboardError::Io(e.into()))?;
 
 		Ok(ClipboardImage { inner: thumbnail })
 	}
@@ -248,9 +260,10 @@ impl ClipboardImage {
 	/// 调整图像大小
 	pub async fn resize(&self, width: u32, height: u32, filter: FilterType) -> Result<Self> {
 		let image = self.inner.clone();
-		let resized = tokio::task::spawn_blocking(move || {
-			image.resize_exact(width, height, filter)
-		}).await.map_err(|e| ClipboardError::Io(e.into()))?;
+		let resized =
+			tokio::task::spawn_blocking(move || image.resize_exact(width, height, filter))
+				.await
+				.map_err(|e| ClipboardError::Io(e.into()))?;
 
 		Ok(ClipboardImage { inner: resized })
 	}
@@ -261,7 +274,9 @@ impl ClipboardImage {
 		let path = path.as_ref().to_path_buf();
 		tokio::task::spawn_blocking(move || {
 			image.save(&path).map_err(|e| ClipboardError::Image(e))
-		}).await.map_err(|e| ClipboardError::Io(e.into()))??;
+		})
+		.await
+		.map_err(|e| ClipboardError::Io(e.into()))??;
 
 		Ok(())
 	}
@@ -295,18 +310,23 @@ impl ClipboardImage {
 
 			match format {
 				ImageFormat::Jpeg => {
-					let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(cursor, quality);
-					encoder.encode_image(&image)
+					let mut encoder =
+						image::codecs::jpeg::JpegEncoder::new_with_quality(cursor, quality);
+					encoder
+						.encode_image(&image)
 						.map_err(|e| ClipboardError::Image(e))?;
 				}
 				_ => {
-					image.write_to(&mut cursor, format)
+					image
+						.write_to(&mut cursor, format)
 						.map_err(|e| ClipboardError::Image(e))?;
 				}
 			}
 
 			Ok::<Vec<u8>, ClipboardError>(buffer)
-		}).await.map_err(|e| ClipboardError::Io(e.into()))??;
+		})
+		.await
+		.map_err(|e| ClipboardError::Io(e.into()))??;
 
 		Ok(bytes)
 	}

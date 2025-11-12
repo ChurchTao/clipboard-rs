@@ -220,7 +220,11 @@ impl InnerContext {
 					)?;
 					success = true;
 				}
-				Err(_) => return Err(ClipboardError::PlatformError("Failed to read clipboard data".into())),
+				Err(_) => {
+					return Err(ClipboardError::PlatformError(
+						"Failed to read clipboard data".into(),
+					))
+				}
 			}
 		} else {
 			let reader = self.wait_write_data.read();
@@ -240,7 +244,11 @@ impl InnerContext {
 						None => false,
 					};
 				}
-				Err(_) => return Err(ClipboardError::PlatformError("Failed to read clipboard data".into())),
+				Err(_) => {
+					return Err(ClipboardError::PlatformError(
+						"Failed to read clipboard data".into(),
+					))
+				}
 			}
 		}
 		// on failure, we notify the requester of it
@@ -344,7 +352,9 @@ impl InnerContext {
 						is_incr = true;
 						continue;
 					} else if reply.type_ != target && reply.type_ != atoms.ATOM {
-						return Err(ClipboardError::InvalidData("Clipboard data type mismatch".into()));
+						return Err(ClipboardError::InvalidData(
+							"Clipboard data type mismatch".into(),
+						));
 					}
 					buff.extend_from_slice(&reply.value);
 					break;
@@ -448,7 +458,11 @@ impl ClipboardContext {
 				writer.clear();
 				writer.extend(data);
 			}
-			Err(_) => return Err(ClipboardError::PlatformError("Failed to write clipboard data".into())),
+			Err(_) => {
+				return Err(ClipboardError::PlatformError(
+					"Failed to write clipboard data".into(),
+				))
+			}
 		}
 		let ctx = &self.inner.server_for_write;
 		let atoms = ctx.atoms;
@@ -468,7 +482,9 @@ impl ClipboardContext {
 		{
 			Ok(())
 		} else {
-			Err(ClipboardError::PlatformError("Failed to take ownership of the clipboard".into()))
+			Err(ClipboardError::PlatformError(
+				"Failed to take ownership of the clipboard".into(),
+			))
 		}
 	}
 }
@@ -497,14 +513,18 @@ fn process_server_req(context: &InnerContext) -> Result<()> {
 						.wait_write_data
 						.write()
 						.map(|mut writer| writer.clear())
-						.map_err(|e| ClipboardError::PlatformError(format!("write clipboard data error: {e:?}")))?;
+						.map_err(|e| {
+							ClipboardError::PlatformError(format!(
+								"write clipboard data error: {e:?}"
+							))
+						})?;
 				}
 			}
 			Event::SelectionRequest(event) => {
 				// Someone is requesting the clipboard content from us.
-				context
-					.handle_selection_request(event)
-					.map_err(|e| ClipboardError::PlatformError(format!("handle_selection_request error: {e:?}")))?;
+				context.handle_selection_request(event).map_err(|e| {
+					ClipboardError::PlatformError(format!("handle_selection_request error: {e:?}"))
+				})?;
 			}
 			Event::SelectionNotify(event) => {
 				// We've requested the clipboard content and this is the answer.

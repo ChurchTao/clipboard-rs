@@ -7,7 +7,9 @@ use std::{mem, ptr, thread};
 use crate::common::{ClipboardError, ContentData, Result};
 #[cfg(feature = "image")]
 use crate::common::{RustImage, RustImageData};
-use crate::{AsyncClipboard, Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
+use crate::{
+	AsyncClipboard, Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat,
+};
 use clipboard_win::raw::{set_file_list_with, set_string_with, set_without_clear};
 use clipboard_win::types::c_uint;
 use clipboard_win::{
@@ -71,7 +73,9 @@ impl ClipboardContext {
 		};
 		Ok(ClipboardContext {
 			format_map,
-			html_format: html_format.ok_or(ClipboardError::PlatformError("register html format error".into()))?,
+			html_format: html_format.ok_or(ClipboardError::PlatformError(
+				"register html format error".into(),
+			))?,
 		})
 	}
 
@@ -102,8 +106,9 @@ impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 
 impl Clipboard for ClipboardContext {
 	fn available_formats(&self) -> Result<Vec<String>> {
-		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| ClipboardError::PlatformError(format!("Open clipboard error, code = {code}")))?;
+		let _clip = ClipboardWin::new_attempts(10).map_err(|code| {
+			ClipboardError::PlatformError(format!("Open clipboard error, code = {code}"))
+		})?;
 		let format_count = clipboard_win::count_formats();
 		if format_count.is_none() {
 			return Ok(Vec::new());
@@ -152,11 +157,14 @@ impl Clipboard for ClipboardContext {
 	}
 
 	fn clear(&self) -> Result<()> {
-		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| ClipboardError::PlatformError(format!("Open clipboard error, code = {code}")))?;
+		let _clip = ClipboardWin::new_attempts(10).map_err(|code| {
+			ClipboardError::PlatformError(format!("Open clipboard error, code = {code}"))
+		})?;
 		let res = clipboard_win::empty();
 		if let Err(e) = res {
-			return Err(ClipboardError::PlatformError(format!("Empty clipboard error, code = {e}")));
+			return Err(ClipboardError::PlatformError(format!(
+				"Empty clipboard error, code = {e}"
+			)));
 		}
 		Ok(())
 	}
@@ -164,13 +172,17 @@ impl Clipboard for ClipboardContext {
 	fn get_buffer(&self, format: &str) -> Result<Vec<u8>> {
 		let format_uint = clipboard_win::register_format(format);
 		if format_uint.is_none() {
-			return Err(ClipboardError::PlatformError("register format error".into()));
+			return Err(ClipboardError::PlatformError(
+				"register format error".into(),
+			));
 		}
 		let format_uint = format_uint.unwrap().get();
 		let buffer = get_clipboard(formats::RawData(format_uint));
 		match buffer {
 			Ok(data) => Ok(data),
-			Err(e) => Err(ClipboardError::PlatformError(format!("Get buffer error, code = {e}"))),
+			Err(e) => Err(ClipboardError::PlatformError(format!(
+				"Get buffer error, code = {e}"
+			))),
 		}
 	}
 
@@ -178,7 +190,9 @@ impl Clipboard for ClipboardContext {
 		let string: SysResult<String> = get_clipboard(formats::Unicode);
 		match string {
 			Ok(s) => Ok(s),
-			Err(e) => Err(ClipboardError::PlatformError(format!("Get text error, code = {e}"))),
+			Err(e) => Err(ClipboardError::PlatformError(format!(
+				"Get text error, code = {e}"
+			))),
 		}
 	}
 
@@ -200,7 +214,9 @@ impl Clipboard for ClipboardContext {
 				}
 				Err(ClipboardError::Empty)
 			}
-			Err(e) => Err(ClipboardError::PlatformError(format!("Get buffer error, code = {e}"))),
+			Err(e) => Err(ClipboardError::PlatformError(format!(
+				"Get buffer error, code = {e}"
+			))),
 		}
 	}
 
@@ -226,13 +242,17 @@ impl Clipboard for ClipboardContext {
 						DynamicImage::from_decoder(decoder).map_err(|e| format!("{e}"))?;
 					Ok(RustImageData::from_dynamic_image(dynamic_image))
 				}
-				Err(e) => Err(ClipboardError::PlatformError(format!("Get image error, code = {e}"))),
+				Err(e) => Err(ClipboardError::PlatformError(format!(
+					"Get image error, code = {e}"
+				))),
 			}
 		} else if clipboard_win::is_format_avail(formats::CF_DIB) {
 			let res = get_clipboard(formats::Bitmap);
 			match res {
 				Ok(data) => RustImageData::from_bytes(&data),
-				Err(e) => Err(ClipboardError::PlatformError(format!("Get image error, code = {e}"))),
+				Err(e) => Err(ClipboardError::PlatformError(format!(
+					"Get image error, code = {e}"
+				))),
 			}
 		} else {
 			Err(ClipboardError::Empty)
@@ -243,13 +263,16 @@ impl Clipboard for ClipboardContext {
 		let files: SysResult<Vec<String>> = get_clipboard(formats::FileList);
 		match files {
 			Ok(f) => Ok(f),
-			Err(e) => Err(ClipboardError::PlatformError(format!("Get files error, code = {e}"))),
+			Err(e) => Err(ClipboardError::PlatformError(format!(
+				"Get files error, code = {e}"
+			))),
 		}
 	}
 
 	fn get(&self, formats: &[ContentFormat]) -> Result<Vec<ClipboardContent>> {
-		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| ClipboardError::PlatformError(format!("Open clipboard error, code = {code}")))?;
+		let _clip = ClipboardWin::new_attempts(10).map_err(|code| {
+			ClipboardError::PlatformError(format!("Open clipboard error, code = {code}"))
+		})?;
 		let mut res = Vec::new();
 		for format in formats {
 			match format {
@@ -325,7 +348,9 @@ impl Clipboard for ClipboardContext {
 	fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
 		let format_uint = clipboard_win::register_format(format);
 		if format_uint.is_none() {
-			return Err(ClipboardError::PlatformError("register format error".into()));
+			return Err(ClipboardError::PlatformError(
+				"register format error".into(),
+			));
 		}
 		let format_uint = format_uint.unwrap().get();
 		let res = set_clipboard(formats::RawData(format_uint), buffer);
@@ -356,11 +381,14 @@ impl Clipboard for ClipboardContext {
 
 	#[cfg(feature = "image")]
 	fn set_image(&self, image: RustImageData) -> Result<()> {
-		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| ClipboardError::PlatformError(format!("Open clipboard error, code = {code}")))?;
+		let _clip = ClipboardWin::new_attempts(10).map_err(|code| {
+			ClipboardError::PlatformError(format!("Open clipboard error, code = {code}"))
+		})?;
 		let res = clipboard_win::empty();
 		if let Err(e) = res {
-			return Err(ClipboardError::PlatformError(format!("Empty clipboard error, code = {e}")));
+			return Err(ClipboardError::PlatformError(format!(
+				"Empty clipboard error, code = {e}"
+			)));
 		}
 		// chromium source code
 		// @link {https://source.chromium.org/chromium/chromium/src/+/main:ui/base/clipboard/clipboard_win.cc;l=771;drc=2a5aaed0ff3a0895c8551495c2656ed49baf742c;bpv=0;bpt=1}
@@ -373,26 +401,31 @@ impl Clipboard for ClipboardContext {
 			}
 		}
 		// 转换为 BMP 并设置到剪贴板
-		let bmp = image
-			.to_bitmap()
-			.map_err(|e| ClipboardError::PlatformError(format!("transform to bitmap error, code = {e}")))?;
+		let bmp = image.to_bitmap().map_err(|e| {
+			ClipboardError::PlatformError(format!("transform to bitmap error, code = {e}"))
+		})?;
 
-		set_bitmap_inner(bmp.get_bytes()).map_err(|e| ClipboardError::PlatformError(format!("set image error, code = {e}")))
+		set_bitmap_inner(bmp.get_bytes())
+			.map_err(|e| ClipboardError::PlatformError(format!("set image error, code = {e}")))
 	}
 
 	fn set_files(&self, files: Vec<String>) -> Result<()> {
-		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| ClipboardError::PlatformError(format!("Open clipboard error, code = {code}")))?;
+		let _clip = ClipboardWin::new_attempts(10).map_err(|code| {
+			ClipboardError::PlatformError(format!("Open clipboard error, code = {code}"))
+		})?;
 		let res = set_file_list_with(&files, options::DoClear);
 		res.map_err(|e| ClipboardError::PlatformError(format!("set files error, code = {e}")))
 	}
 
 	fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
-		let _clip = ClipboardWin::new_attempts(10)
-			.map_err(|code| ClipboardError::PlatformError(format!("Open clipboard error, code = {code}")))?;
+		let _clip = ClipboardWin::new_attempts(10).map_err(|code| {
+			ClipboardError::PlatformError(format!("Open clipboard error, code = {code}"))
+		})?;
 		let res = clipboard_win::empty();
 		if let Err(e) = res {
-			return Err(ClipboardError::PlatformError(format!("Empty clipboard error, code = {e}")));
+			return Err(ClipboardError::PlatformError(format!(
+				"Empty clipboard error, code = {e}"
+			)));
 		}
 		for content in contents {
 			match content {

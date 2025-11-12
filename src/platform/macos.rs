@@ -1,7 +1,10 @@
 use crate::common::{ClipboardError, Result};
 #[cfg(feature = "image")]
 use crate::common::{RustImage, RustImageData};
-use crate::{AsyncClipboard, Clipboard, ClipboardContent, ClipboardContentBuilder, ClipboardHandler, ClipboardWatcher, ContentFormat};
+use crate::{
+	AsyncClipboard, Clipboard, ClipboardContent, ClipboardContentBuilder, ClipboardHandler,
+	ClipboardWatcher, ContentFormat,
+};
 use objc2::rc::Retained;
 use objc2::AllocAnyThread;
 use objc2::ClassType;
@@ -102,10 +105,12 @@ impl ClipboardContext {
 
 	fn plain(&self, r#type: &NSPasteboardType) -> Result<String> {
 		autoreleasepool(|_| {
-			let contents = self
-				.pasteboard
-				.pasteboardItems()
-				.ok_or(ClipboardError::PlatformError("NSPasteboard#pasteboardItems errored".into()))?;
+			let contents =
+				self.pasteboard
+					.pasteboardItems()
+					.ok_or(ClipboardError::PlatformError(
+						"NSPasteboard#pasteboardItems errored".into(),
+					))?;
 			for item in contents {
 				if let Some(string) = item.stringForType(r#type) {
 					return Ok(string.to_string());
@@ -146,7 +151,9 @@ impl ClipboardContext {
 					.collect::<Vec<_>>(),
 			);
 			if !self.pasteboard.writeObjects(&write_objects) {
-				return Err(ClipboardError::PlatformError("writeObjects failed for files".into()));
+				return Err(ClipboardError::PlatformError(
+					"writeObjects failed for files".into(),
+				));
 			}
 			Ok(())
 		})
@@ -312,7 +319,9 @@ impl Clipboard for ClipboardContext {
 		let types = self
 			.pasteboard
 			.types()
-			.ok_or(ClipboardError::PlatformError("NSPasteboard#types errored".into()))?;
+			.ok_or(ClipboardError::PlatformError(
+				"NSPasteboard#types errored".into(),
+			))?;
 		let res = types.iter().map(|t| t.to_string()).collect();
 		Ok(res)
 	}
@@ -444,10 +453,12 @@ impl Clipboard for ClipboardContext {
 
 	fn get(&self, formats: &[ContentFormat]) -> Result<Vec<ClipboardContent>> {
 		autoreleasepool(|_| {
-			let contents = self
-				.pasteboard
-				.pasteboardItems()
-				.ok_or(ClipboardError::PlatformError("NSPasteboard#pasteboardItems errored".into()))?;
+			let contents =
+				self.pasteboard
+					.pasteboardItems()
+					.ok_or(ClipboardError::PlatformError(
+						"NSPasteboard#pasteboardItems errored".into(),
+					))?;
 			let mut results = Vec::new();
 			for format in formats {
 				for item in contents.iter() {
@@ -535,9 +546,9 @@ impl Clipboard for ClipboardContext {
 
 	fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
 		if contents.is_empty() {
-			return Err(
-				ClipboardError::InvalidData("contents is empty, if you want to clear clipboard, please use clear method".into()),
-			);
+			return Err(ClipboardError::InvalidData(
+				"contents is empty, if you want to clear clipboard, please use clear method".into(),
+			));
 		}
 		self.write_to_clipboard(&contents, true)
 	}
