@@ -31,10 +31,17 @@ required-features = ["async-image"]
 name = "image_modern"
 required-features = ["async-image"]
 
+[[example]]
+name = "raw_data"
+
+[[example]]
+name = "async_watcher"
+required-features = ["async-image"]
+
 [dependencies]
 thiserror = "2"
 async-trait = "0.1"
-tokio = { version = "1.0", features = ["rt", "sync"], optional = true }
+tokio = { version = "1.0", features = ["rt", "sync", "time"], optional = true }
 image = { version = "0.25.5", optional = true, default-features = false, features = [
     "png",
     "jpeg",

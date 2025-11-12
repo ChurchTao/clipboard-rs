@@ -4,7 +4,7 @@ mod platform;
 pub use common::RustImageData;
 #[cfg(feature = "async-image")]
 pub use common::ClipboardImage;
-pub use common::{ClipboardContent, ClipboardContentBuilder, ClipboardHandler, ContentFormat, Result, RustImage};
+use crate::common::{ClipboardContent, ClipboardContentBuilder, ClipboardHandler, ContentFormat, Result};
 #[cfg(feature = "image")]
 pub use image::imageops::FilterType;
 #[cfg(target_os = "linux")]
@@ -13,6 +13,9 @@ pub use platform::{ClipboardContext, ClipboardWatcherContext, WatcherShutdown};
 
 // 重新导出 async_trait 以便使用者可以直接使用
 pub use async_trait;
+
+#[cfg(feature = "async-image")]
+use tokio::sync::mpsc;
 
 /// 高级别的剪贴板管理器，提供简化的 API
 pub struct ClipboardManager {
@@ -95,13 +98,13 @@ impl ClipboardManager {
 	}
 
 	/// 获取原始数据
-	pub async fn get_buffer(&self, format: &str) -> Result<Vec<u8>> {
-		self.inner.get_buffer(format).await
+	pub async fn get_raw(&self, format: &str) -> Result<Vec<u8>> {
+		self.inner.get_raw(format).await
 	}
 
 	/// 设置原始数据
-	pub async fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
-		self.inner.set_buffer(format, buffer).await
+	pub async fn set_raw(&self, format: &str, data: &[u8]) -> Result<()> {
+		self.inner.set_raw(format, data).await
 	}
 
 	/// 获取图像内容
@@ -116,6 +119,31 @@ impl ClipboardManager {
 	pub async fn set_image(&self, image: ClipboardImage) -> Result<()> {
 		let image_data = RustImageData::from_dynamic_image(image.get_dynamic_image().clone());
 		self.inner.set_image(image_data).await
+	}
+}
+
+#[cfg(feature = "async-image")]
+#[async_trait::async_trait]
+impl AsyncClipboardWatcher for ClipboardManager {
+	async fn watch(&self) -> Result<ClipboardEventStream> {
+		// 创建一个通道用于发送剪贴板事件
+		let (_sender, receiver) = mpsc::channel(100);
+
+		// 创建事件流
+		let event_stream = ClipboardEventStream { receiver };
+
+		// TODO: 实现实际的监视逻辑
+		// 这里需要在后台任务中实现剪贴板监视
+
+		Ok(event_stream)
+	}
+
+	async fn add_handler<F>(&self, _handler: F) -> Result<()>
+	where
+		F: Fn(ClipboardEvent) + Send + Sync + 'static,
+	{
+		// TODO: 实现事件处理器的添加逻辑
+		Ok(())
 	}
 }
 
@@ -200,7 +228,7 @@ pub trait AsyncClipboard: Send + Sync {
 	async fn clear(&self) -> Result<()>;
 
 	/// 获取指定格式的原始数据
-	async fn get_buffer(&self, format: &str) -> Result<Vec<u8>>;
+	async fn get_raw(&self, format: &str) -> Result<Vec<u8>>;
 
 	/// 获取纯文本内容
 	async fn get_text(&self) -> Result<String>;
@@ -222,7 +250,7 @@ pub trait AsyncClipboard: Send + Sync {
 	async fn get(&self, formats: &[ContentFormat]) -> Result<Vec<ClipboardContent>>;
 
 	/// 设置原始数据
-	async fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()>;
+	async fn set_raw(&self, format: &str, data: &[u8]) -> Result<()>;
 
 	/// 设置纯文本内容
 	async fn set_text(&self, text: &str) -> Result<()>;
@@ -264,6 +292,46 @@ pub trait ClipboardWatcher<T: ClipboardHandler>: Send {
 	/// en: Get the channel to stop monitoring, you can stop monitoring through this channel
 	#[deprecated(since = "0.4.0", note = "请使用新的异步API，未来版本将提供更好的异步监听方案")]
 	fn get_shutdown_channel(&self) -> WatcherShutdown;
+}
+
+/// 剪贴板事件流
+#[cfg(feature = "async-image")]
+pub struct ClipboardEventStream {
+	receiver: mpsc::Receiver<ClipboardEvent>,
+}
+
+#[cfg(feature = "async-image")]
+impl ClipboardEventStream {
+	pub async fn next(&mut self) -> Option<ClipboardEvent> {
+		self.receiver.recv().await
+	}
+}
+
+/// 现代化的异步 ClipboardWatcher trait，提供更现代化的 API
+#[cfg(feature = "async-image")]
+#[async_trait::async_trait]
+pub trait AsyncClipboardWatcher: Send + Sync {
+	/// 启动监视器并返回一个事件流
+	async fn watch(&self) -> Result<ClipboardEventStream>;
+
+	/// 添加事件处理器
+	async fn add_handler<F>(&self, handler: F) -> Result<()>
+	where
+		F: Fn(ClipboardEvent) + Send + Sync + 'static;
+}
+
+
+/// 剪贴板事件
+#[derive(Debug, Clone)]
+pub enum ClipboardEvent {
+	/// 剪贴板内容已更改
+	Changed {
+		formats: Vec<ContentFormat>,
+	},
+	/// 剪贴板已清空
+	Cleared,
+	/// 错误事件
+	Error(String),
 }
 
 impl WatcherShutdown {

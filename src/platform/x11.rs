@@ -95,7 +95,7 @@ impl AsyncClipboard for ClipboardContext {
 		self.clear()
 	}
 
-	async fn get_buffer(&self, format: &str) -> Result<Vec<u8>> {
+	async fn get_raw(&self, format: &str) -> Result<Vec<u8>> {
 		self.get_buffer(format)
 	}
 
@@ -125,8 +125,8 @@ impl AsyncClipboard for ClipboardContext {
 		self.get(formats)
 	}
 
-	async fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
-		self.set_buffer(format, buffer)
+	async fn set_raw(&self, format: &str, data: &[u8]) -> Result<()> {
+		self.set_buffer(format, data.to_vec())
 	}
 
 	async fn set_text(&self, text: &str) -> Result<()> {
