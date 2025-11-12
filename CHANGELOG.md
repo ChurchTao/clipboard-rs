@@ -20,6 +20,10 @@
 - Error handling now uses `ClipboardError` instead of `Box<dyn Error>`
 - Some method names changed (e.g., `get_rich_text` → `get_rtf` in new API)
 
+### Deprecations
+- Legacy synchronous API methods are now marked as deprecated with migration guidance to the new async API
+- Legacy clipboard watching API methods are now marked as deprecated with future async alternatives planned
+
 ## v0.3.1 (2025-11-11) [released]
 
 - Merge pull request [#69](https://github.com/ChurchTao/clipboard-rs/pull/69) from Ciubix8513/master

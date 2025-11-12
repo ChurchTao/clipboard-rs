@@ -62,7 +62,9 @@ clipboard-rs = "0.3.1"
 
 [Examples](examples)
 
-### Simple Read and Write (Legacy API)
+### Simple Read and Write (Legacy API) ⚠️ *已废弃*
+
+> ⚠️ **警告**: 此API已在v0.4.0版本中标记为废弃，将在未来版本中移除。请使用下方的现代化异步API。
 
 ```rust
 use clipboard_rs::{Clipboard, ClipboardContext, ContentFormat};

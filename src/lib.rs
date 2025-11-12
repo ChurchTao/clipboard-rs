@@ -122,51 +122,68 @@ impl ClipboardManager {
 pub trait Clipboard: Send {
 	/// zh: 获得剪切板当前内容的所有格式
 	/// en: Get all formats of the current content in the clipboard
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API: clipboard.available_formats().await")]
 	fn available_formats(&self) -> Result<Vec<String>>;
 
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API: clipboard.has(format).await")]
 	fn has(&self, format: ContentFormat) -> bool;
 
 	/// zh: 清空剪切板
 	/// en: clear clipboard
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API: clipboard.clear().await")]
 	fn clear(&self) -> Result<()>;
 
 	/// zh: 获得指定格式的数据，以字节数组形式返回
 	/// en: Get the data in the specified format in the clipboard as a byte array
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API: clipboard.get_buffer(format).await")]
 	fn get_buffer(&self, format: &str) -> Result<Vec<u8>>;
 
 	/// zh: 仅获得无格式纯文本，以字符串形式返回
 	/// en: Get plain text content in the clipboard as string
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API: clipboard.get_text().await")]
 	fn get_text(&self) -> Result<String>;
 
 	/// zh: 获得剪贴板中的富文本内容，以字符串形式返回
 	/// en: Get the rich text content in the clipboard as string
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API: clipboard.get_rtf().await")]
 	fn get_rich_text(&self) -> Result<String>;
 
 	/// zh: 获得剪贴板中的html内容，以字符串形式返回
 	/// en: Get the html format content in the clipboard as string
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API: clipboard.get_html().await")]
 	fn get_html(&self) -> Result<String>;
 
 	#[cfg(feature = "image")]
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API: clipboard.get_image().await")]
 	fn get_image(&self) -> Result<RustImageData>;
 
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API: clipboard.get_files().await")]
 	fn get_files(&self) -> Result<Vec<String>>;
 
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API: clipboard.get(formats).await")]
 	fn get(&self, formats: &[ContentFormat]) -> Result<Vec<ClipboardContent>>;
 
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API: clipboard.set_buffer(format, buffer).await")]
 	fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()>;
 
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API: clipboard.set_text(text).await")]
 	fn set_text(&self, text: String) -> Result<()>;
 
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API: clipboard.set_rtf(text).await")]
 	fn set_rich_text(&self, text: String) -> Result<()>;
 
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API: clipboard.set_html(html).await")]
 	fn set_html(&self, html: String) -> Result<()>;
 
 	#[cfg(feature = "image")]
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API: clipboard.set_image(image).await")]
 	fn set_image(&self, image: RustImageData) -> Result<()>;
 
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API: clipboard.set_files(files).await")]
 	fn set_files(&self, files: Vec<String>) -> Result<()>;
 
 	/// set image will clear clipboard
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API: clipboard.set(contents).await")]
 	fn set(&self, contents: Vec<ClipboardContent>) -> Result<()>;
 }
 
@@ -235,14 +252,17 @@ pub trait AsyncClipboard: Send + Sync {
 pub trait ClipboardWatcher<T: ClipboardHandler>: Send {
 	/// zh: 添加一个剪切板变化处理器，可以添加多个处理器，处理器需要实现 [`ClipboardHandler`] 这个trait
 	/// en: Add a clipboard change handler, you can add multiple handlers, the handler needs to implement the trait [`ClipboardHandler`]
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API，未来版本将提供更好的异步监听方案")]
 	fn add_handler(&mut self, handler: T) -> &mut Self;
 
 	/// zh: 开始监视剪切板变化，这是一个阻塞方法，直到监视结束，或者调用了stop方法，所以建议在单独的线程中调用
 	/// en: Start monitoring clipboard changes, this is a blocking method, until the monitoring ends, or the stop method is called, so it is recommended to call it in a separate thread
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API，未来版本将提供更好的异步监听方案")]
 	fn start_watch(&mut self);
 
 	/// zh: 获得停止监视的通道，可以通过这个通道停止监视
 	/// en: Get the channel to stop monitoring, you can stop monitoring through this channel
+	#[deprecated(since = "0.4.0", note = "请使用新的异步API，未来版本将提供更好的异步监听方案")]
 	fn get_shutdown_channel(&self) -> WatcherShutdown;
 }
 
