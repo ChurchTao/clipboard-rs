@@ -5,9 +5,16 @@ pub use crate::common::{
 };
 #[cfg(feature = "image")]
 pub use common::ClipboardImage;
+#[cfg(feature = "async")]
+pub use platform::start_async_watch;
+pub use platform::ClipboardContext;
 #[cfg(target_os = "linux")]
 pub use platform::ClipboardContextX11Options;
-pub use platform::{start_async_watch, ClipboardContext};
+// 重新导出 async_trait 以便使用者可以直接使用
+#[cfg(feature = "async")]
+pub use async_trait;
+#[cfg(feature = "async")]
+use tokio::sync::mpsc;
 
 /// 剪贴板事件
 #[cfg(feature = "async")]
@@ -49,13 +56,6 @@ impl Drop for ClipboardEventStream {
 		let _ = self._shutdown_tx.send(true);
 	}
 }
-
-// 重新导出 async_trait 以便使用者可以直接使用
-#[cfg(feature = "async")]
-pub use async_trait;
-use objc2::sel;
-#[cfg(feature = "async")]
-use tokio::sync::mpsc;
 
 /// 高级别的同步剪贴板管理器，提供简化的 API
 pub struct SyncClipboardManager {

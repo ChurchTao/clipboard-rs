@@ -1,10 +1,19 @@
 #[cfg(feature = "image")]
 use crate::common::ClipboardImage;
 use crate::common::{ClipboardError, Result};
-use crate::{AsyncClipboard, Clipboard, ClipboardContent, ClipboardContentBuilder, ContentFormat};
+#[cfg(feature = "async")]
+use crate::AsyncClipboard;
+use crate::{Clipboard, ClipboardContent, ClipboardContentBuilder, ContentFormat};
 use objc2::rc::Retained;
-use objc2::{rc::autoreleasepool, runtime::ProtocolObject, AllocAnyThread, ClassType};
-use objc2_app_kit::{NSImage, NSPasteboard, NSPasteboardItem, NSPasteboardType, NSPasteboardTypeFileURL, NSPasteboardTypeHTML, NSPasteboardTypePNG, NSPasteboardTypeRTF, NSPasteboardTypeString, NSPasteboardTypeTIFF};
+#[cfg(feature = "image")]
+use objc2::AllocAnyThread;
+use objc2::{rc::autoreleasepool, runtime::ProtocolObject, ClassType};
+#[cfg(feature = "image")]
+use objc2_app_kit::{NSImage, NSPasteboardTypePNG, NSPasteboardTypeTIFF};
+use objc2_app_kit::{
+	NSPasteboard, NSPasteboardItem, NSPasteboardType, NSPasteboardTypeFileURL,
+	NSPasteboardTypeHTML, NSPasteboardTypeRTF, NSPasteboardTypeString,
+};
 use objc2_foundation::{NSArray, NSData, NSString, NSURL};
 use std::ffi::c_void;
 
@@ -154,6 +163,7 @@ impl ClipboardContext {
 unsafe impl Send for ClipboardContext {}
 
 #[async_trait::async_trait]
+#[cfg(feature = "async")]
 impl AsyncClipboard for ClipboardContext {
 	async fn available_formats(&self) -> Result<Vec<String>> {
 		Clipboard::available_formats(self)

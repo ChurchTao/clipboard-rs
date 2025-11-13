@@ -5,7 +5,10 @@ pub use ios::{start_async_watch, ClipboardContext};
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
-pub use macos::{start_async_watch, ClipboardContext};
+#[cfg(feature = "async")]
+pub use macos::start_async_watch;
+#[cfg(target_os = "macos")]
+pub use macos::ClipboardContext;
 #[cfg(target_os = "windows")]
 mod win;
 #[cfg(target_os = "windows")]

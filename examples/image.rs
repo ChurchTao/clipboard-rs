@@ -1,6 +1,6 @@
 #[cfg(target_os = "linux")]
 use clipboard_rs::ClipboardContextX11Options;
-use clipboard_rs::{Clipboard, ClipboardImage, SyncClipboardManager};
+use clipboard_rs::SyncClipboardManager;
 
 #[cfg(target_os = "macos")]
 const TMP_PATH: &str = "/tmp/";
@@ -28,17 +28,7 @@ fn setup_clipboard() -> clipboard_rs::ClipboardContext {
 	.unwrap()
 }
 
-#[cfg(not(target_os = "linux"))]
-fn setup_clipboard() -> clipboard_rs::ClipboardContext {
-	clipboard_rs::ClipboardContext::new().unwrap()
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-	let ctx = setup_clipboard();
-
-	let types = ctx.available_formats()?;
-	println!("Available formats: {:?}", types);
-
 	// Create new synchronous clipboard manager (requires "image" feature)
 	let clipboard = SyncClipboardManager::new()?;
 

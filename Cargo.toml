@@ -29,9 +29,6 @@ name = "modern"
 required-features = ["async"]
 
 [[example]]
-name = "raw_data"
-
-[[example]]
 name = "async_watcher"
 required-features = ["async"]
 

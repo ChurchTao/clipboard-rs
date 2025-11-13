@@ -1,55 +1,25 @@
-use clipboard_rs::{common::ContentFormat, AsyncClipboardManager};
+use clipboard_rs::{ContentFormat, SyncClipboardManager};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-	// 创建新的异步剪贴板管理器
-	let clipboard = AsyncClipboardManager::new().await?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+	// Create new synchronous clipboard manager (requires "text" feature)
+	let clipboard = SyncClipboardManager::new()?;
 
-	// 清空剪贴板
-	clipboard.clear().await?;
-
-	// 设置原始数据
-	let custom_data = b"Hello, Raw Data!".to_vec();
-	clipboard.set_raw("custom/format", &custom_data).await?;
-
-	// 检查是否包含自定义格式
-	let formats = clipboard.available_formats().await?;
+	let formats = clipboard.available_formats()?;
 	println!("Available formats: {:?}", formats);
 
-	// 获取原始数据
-	if formats.contains(&"custom/format".to_string()) {
-		let retrieved_data = clipboard.get_raw("custom/format").await?;
-		println!(
-			"Retrieved raw data: {:?}",
-			String::from_utf8_lossy(&retrieved_data)
-		);
+	// Check if HTML format is available
+	let has_html = clipboard.has(ContentFormat::Html)?;
+	if has_html {
+		let html_content = clipboard.get_html()?;
+		println!("HTML content: {}", html_content);
 	}
 
-	// 设置多种原始数据格式
-	clipboard
-		.set_raw("application/json", br#"{"message": "Hello JSON"}"#)
-		.await?;
-	clipboard
-		.set_raw("text/csv", b"name,age\nAlice,30\nBob,25")
-		.await?;
-
-	// 获取所有可用格式
-	let all_formats = clipboard.available_formats().await?;
-	println!("All available formats: {:?}", all_formats);
-
-	// 获取JSON数据
-	if all_formats.contains(&"application/json".to_string()) {
-		let json_data = clipboard.get_raw("application/json").await?;
-		println!("JSON data: {}", String::from_utf8_lossy(&json_data));
+	// Read raw data with custom format
+	if formats.contains(&"public.html".to_string()) {
+		let buffer = clipboard.get_raw("public.html")?;
+		let string = String::from_utf8(buffer)?;
+		println!("Raw HTML: {}", string);
 	}
-
-	// 获取CSV数据
-	if all_formats.contains(&"text/csv".to_string()) {
-		let csv_data = clipboard.get_raw("text/csv").await?;
-		println!("CSV data: {}", String::from_utf8_lossy(&csv_data));
-	}
-
-	println!("Raw data operations completed successfully!");
 
 	Ok(())
 }
