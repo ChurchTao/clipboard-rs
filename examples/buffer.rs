@@ -1,13 +1,25 @@
-use clipboard_rs::{Clipboard, ClipboardContext};
+use clipboard_rs::{SyncClipboardManager, ContentFormat};
 
-fn main() {
-	let ctx = ClipboardContext::new().unwrap();
-	let types = ctx.available_formats().unwrap();
-	println!("{:?}", types);
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create new synchronous clipboard manager (requires "text" feature)
+    let clipboard = SyncClipboardManager::new()?;
 
-	let buffer = ctx.get_buffer("public.html").unwrap();
+    let formats = clipboard.available_formats()?;
+    println!("Available formats: {:?}", formats);
 
-	let string = String::from_utf8(buffer).unwrap();
+    // Check if HTML format is available
+    let has_html = clipboard.has(ContentFormat::Html)?;
+    if has_html {
+        let html_content = clipboard.get_html()?;
+        println!("HTML content: {}", html_content);
+    }
 
-	println!("{}", string);
+    // Read raw data with custom format
+    if formats.contains(&"public.html".to_string()) {
+        let buffer = clipboard.get_raw("public.html")?;
+        let string = String::from_utf8(buffer)?;
+        println!("Raw HTML: {}", string);
+    }
+
+    Ok(())
 }

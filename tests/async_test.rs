@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
-	use clipboard_rs::{common::ContentFormat, ClipboardManager};
+	use clipboard_rs::{common::ContentFormat, AsyncClipboardManager};
 
 	#[tokio::test]
 	async fn test_async_string() {
-		let clipboard = ClipboardManager::new().await.unwrap();
+		let clipboard = AsyncClipboardManager::new().await.unwrap();
 		clipboard.clear().await.unwrap();
 
 		let test_plain_txt = "Hello Async Rust!!!";
@@ -25,7 +25,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn test_async_builder() {
-		let clipboard = ClipboardManager::new().await.unwrap();
+		let clipboard = AsyncClipboardManager::new().await.unwrap();
 		clipboard.clear().await.unwrap();
 
 		let test_plain_txt = "Hello Builder API!";
@@ -33,7 +33,7 @@ mod tests {
 		let test_rtf = "{\\rtf1\\ansi\\b Hello Builder API!}";
 
 		clipboard
-			.set_with_builder(
+			.set(
 				clipboard
 					.build_content()
 					.with_text(test_plain_txt)

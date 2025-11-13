@@ -1,9 +1,9 @@
-use clipboard_rs::{common::ContentFormat, ClipboardManager};
+use clipboard_rs::{common::ContentFormat, AsyncClipboardManager};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-	// 创建新的剪贴板管理器
-	let clipboard = ClipboardManager::new().await?;
+	// 创建新的异步剪贴板管理器
+	let clipboard = AsyncClipboardManager::new().await?;
 
 	// 清空剪贴板
 	clipboard.clear().await?;

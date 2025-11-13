@@ -1,15 +1,15 @@
 #[cfg(target_os = "ios")]
 mod ios;
 #[cfg(target_os = "ios")]
-pub use ios::{ClipboardContext, ClipboardWatcherContext, WatcherShutdown};
+pub use ios::{start_async_watch, ClipboardContext};
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
-pub use macos::{ClipboardContext, ClipboardWatcherContext, WatcherShutdown};
+pub use macos::{start_async_watch, ClipboardContext};
 #[cfg(target_os = "windows")]
 mod win;
 #[cfg(target_os = "windows")]
-pub use win::{ClipboardContext, ClipboardWatcherContext, WatcherShutdown};
+pub use win::{start_async_watch, ClipboardContext};
 #[cfg(all(
 	unix,
 	not(any(
@@ -29,6 +29,4 @@ mod x11;
 		target_os = "emscripten"
 	))
 ))]
-pub use x11::{
-	ClipboardContext, ClipboardContextX11Options, ClipboardWatcherContext, WatcherShutdown,
-};
+pub use x11::{start_async_watch, ClipboardContext, ClipboardContextX11Options};

@@ -1,25 +1,36 @@
-use clipboard_rs::{Clipboard, ClipboardContext, ContentFormat};
+use clipboard_rs::{SyncClipboardManager, ContentFormat};
 
-fn main() {
-	let ctx = ClipboardContext::new().unwrap();
-	let types = ctx.available_formats().unwrap();
-	println!("{:?}", types);
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create new synchronous clipboard manager (requires "text" feature)
+    let clipboard = SyncClipboardManager::new()?;
 
-	let has_rtf = ctx.has(ContentFormat::Rtf);
-	println!("has_rtf={}", has_rtf);
+    let formats = clipboard.available_formats()?;
+    println!("Available formats: {:?}", formats);
 
-	let rtf = ctx.get_rich_text().unwrap_or("".to_string());
+    let has_rtf = clipboard.has(ContentFormat::Rtf)?;
+    println!("has_rtf={}", has_rtf);
 
-	println!("rtf={}", rtf);
+    let rtf = clipboard.get_rtf().unwrap_or_default();
+    println!("rtf={}", rtf);
 
-	let has_html = ctx.has(ContentFormat::Html);
-	println!("has_html={}", has_html);
+    let has_html = clipboard.has(ContentFormat::Html)?;
+    println!("has_html={}", has_html);
 
-	let html = ctx.get_html().unwrap_or("".to_string());
+    let html = clipboard.get_html().unwrap_or_default();
+    println!("html={}", html);
 
-	println!("html={}", html);
+    let content = clipboard.get_text().unwrap_or_default();
+    println!("txt={}", content);
 
-	let content = ctx.get_text().unwrap_or("".to_string());
+    // Using the fluent builder API
+    clipboard
+        .set_with_builder(
+            clipboard
+                .build_content()
+                .with_text("Hello, World!")
+                .with_html("<h1>Hello, World!</h1>")
+                .with_rtf(r"{\rtf1\ansi\b Hello, World!}")
+        )?;
 
-	println!("txt={}", content);
+    Ok(())
 }

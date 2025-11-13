@@ -2,13 +2,13 @@
 //! 需要启用 async-image feature: `cargo run --example image_modern --features async-image`
 
 #[cfg(feature = "async-image")]
-use clipboard_rs::{ClipboardImage, ClipboardManager};
+use clipboard_rs::{ClipboardImage, AsyncClipboardManager};
 
 #[cfg(feature = "async-image")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-	// 创建新的剪贴板管理器
-	let clipboard = ClipboardManager::new().await?;
+	// 创建新的异步剪贴板管理器
+	let clipboard = AsyncClipboardManager::new().await?;
 
 	// 创建一个简单的图像
 	let mut image_buffer = image::RgbImage::new(100, 100);
@@ -26,11 +26,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	);
 
 	// 设置图像到剪贴板
-	clipboard.set_image(clipboard_image).await?;
+	clipboard.set_clipboard_image(clipboard_image).await?;
 	println!("Image set to clipboard successfully!");
 
 	// 从剪贴板获取图像
-	match clipboard.get_image().await {
+	match clipboard.get_clipboard_image().await {
 		Ok(image) => {
 			println!("Got image from clipboard!");
 			println!("Image dimensions: {:?}", image.dimensions());

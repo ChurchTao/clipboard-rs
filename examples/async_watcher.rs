@@ -1,9 +1,9 @@
-use clipboard_rs::{AsyncClipboardWatcher, ClipboardEvent, ClipboardManager};
+use clipboard_rs::{AsyncClipboardWatcher, ClipboardEvent, AsyncClipboardManager};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-	// 创建新的剪贴板管理器
-	let clipboard = ClipboardManager::new().await?;
+	// 创建新的异步剪贴板管理器
+	let clipboard = AsyncClipboardManager::new().await?;
 
 	// 启动监视器
 	let mut event_stream = clipboard.watch().await?;
@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	});
 
 	// 在另一个任务中设置一些剪贴板内容来测试
-	let test_clipboard = ClipboardManager::new().await?;
+	let test_clipboard = AsyncClipboardManager::new().await?;
 	tokio::spawn(async move {
 		tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 		test_clipboard

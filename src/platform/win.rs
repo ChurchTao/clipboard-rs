@@ -6,9 +6,10 @@ use std::{mem, ptr, thread};
 
 use crate::common::{ClipboardError, ContentData, Result};
 #[cfg(feature = "image")]
-use crate::common::{RustImage, RustImageData};
+use crate::common::ClipboardImage;
 use crate::{
 	AsyncClipboard, Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat,
+	ClipboardEvent,
 };
 use clipboard_win::raw::{set_file_list_with, set_string_with, set_without_clear};
 use clipboard_win::types::c_uint;
@@ -26,6 +27,7 @@ use windows::Win32::Graphics::Gdi::{
 	BITMAPV5HEADER, CBM_INIT, DIB_RGB_COLORS, HDC, HGDIOBJ,
 };
 use windows::Win32::System::DataExchange::SetClipboardData;
+use tokio::sync::mpsc::Sender as TokioSender;
 
 pub struct WatcherShutdown {
 	stop_signal: Sender<()>,
@@ -169,7 +171,7 @@ impl Clipboard for ClipboardContext {
 		Ok(())
 	}
 
-	fn get_buffer(&self, format: &str) -> Result<Vec<u8>> {
+	fn get_raw(&self, format: &str) -> Result<Vec<u8>> {
 		let format_uint = clipboard_win::register_format(format);
 		if format_uint.is_none() {
 			return Err(ClipboardError::PlatformError(
@@ -196,8 +198,8 @@ impl Clipboard for ClipboardContext {
 		}
 	}
 
-	fn get_rich_text(&self) -> Result<String> {
-		let rtf_raw_data = self.get_buffer(CF_RTF)?;
+	fn get_rtf(&self) -> Result<String> {
+		let rtf_raw_data = self.get_raw(CF_RTF)?;
 		Ok(String::from_utf8_lossy(&rtf_raw_data).to_string())
 	}
 
@@ -221,11 +223,11 @@ impl Clipboard for ClipboardContext {
 	}
 
 	#[cfg(feature = "image")]
-	fn get_image(&self) -> Result<RustImageData> {
+	fn get_image(&self) -> Result<ClipboardImage> {
 		let cf_png_format = self.format_map.get(CF_PNG);
 		if cf_png_format.is_some() && clipboard_win::is_format_avail(*cf_png_format.unwrap()) {
 			let image_raw_data = self.get_buffer(CF_PNG)?;
-			RustImageData::from_bytes(&image_raw_data)
+			ClipboardImage::from_bytes_sync(&image_raw_data)
 		} else if clipboard_win::is_format_avail(formats::CF_DIBV5) {
 			let res = get_clipboard(formats::RawData(formats::CF_DIBV5));
 			match res {
@@ -240,7 +242,7 @@ impl Clipboard for ClipboardContext {
 					let decoder = decoder.map_err(|e| format!("{e}"))?;
 					let dynamic_image =
 						DynamicImage::from_decoder(decoder).map_err(|e| format!("{e}"))?;
-					Ok(RustImageData::from_dynamic_image(dynamic_image))
+					Ok(ClipboardImage::from_dynamic_image(dynamic_image))
 				}
 				Err(e) => Err(ClipboardError::PlatformError(format!(
 					"Get image error, code = {e}"
@@ -249,7 +251,7 @@ impl Clipboard for ClipboardContext {
 		} else if clipboard_win::is_format_avail(formats::CF_DIB) {
 			let res = get_clipboard(formats::Bitmap);
 			match res {
-				Ok(data) => RustImageData::from_bytes(&data),
+				Ok(data) => ClipboardImage::from_bytes_sync(&data),
 				Err(e) => Err(ClipboardError::PlatformError(format!(
 					"Get image error, code = {e}"
 				))),
@@ -345,7 +347,7 @@ impl Clipboard for ClipboardContext {
 		Ok(res)
 	}
 
-	fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
+	fn set_raw(&self, format: &str, data: &[u8]) -> Result<()> {
 		let format_uint = clipboard_win::register_format(format);
 		if format_uint.is_none() {
 			return Err(ClipboardError::PlatformError(
@@ -353,25 +355,25 @@ impl Clipboard for ClipboardContext {
 			));
 		}
 		let format_uint = format_uint.unwrap().get();
-		let res = set_clipboard(formats::RawData(format_uint), buffer);
+		let res = set_clipboard(formats::RawData(format_uint), data);
 		if res.is_err() {
 			return Err(ClipboardError::PlatformError("set buffer error".into()));
 		}
 		Ok(())
 	}
 
-	fn set_text(&self, text: String) -> Result<()> {
+	fn set_text(&self, text: &str) -> Result<()> {
 		let res = set_clipboard(formats::Unicode, text);
 		res.map_err(|e| ClipboardError::PlatformError(format!("set text error, code = {e}")))
 	}
 
-	fn set_rich_text(&self, text: String) -> Result<()> {
-		let res = self.set_buffer(CF_RTF, text.as_bytes().to_vec());
+	fn set_rtf(&self, rtf: &str) -> Result<()> {
+		let res = self.set_raw(CF_RTF, rtf.as_bytes());
 		res.map_err(|e| ClipboardError::PlatformError(format!("set rich text error, code = {e}")))
 	}
 
-	fn set_html(&self, html: String) -> Result<()> {
-		let cf_html = plain_html_to_cf_html(&html);
+	fn set_html(&self, html: &str) -> Result<()> {
+		let cf_html = plain_html_to_cf_html(html);
 		let res = set_clipboard(
 			formats::RawData(self.html_format.code()),
 			cf_html.as_bytes(),
@@ -380,7 +382,7 @@ impl Clipboard for ClipboardContext {
 	}
 
 	#[cfg(feature = "image")]
-	fn set_image(&self, image: RustImageData) -> Result<()> {
+	fn set_image(&self, image: ClipboardImage) -> Result<()> {
 		let _clip = ClipboardWin::new_attempts(10).map_err(|code| {
 			ClipboardError::PlatformError(format!("Open clipboard error, code = {code}"))
 		})?;
@@ -394,14 +396,14 @@ impl Clipboard for ClipboardContext {
 		// @link {https://source.chromium.org/chromium/chromium/src/+/main:ui/base/clipboard/clipboard_win.cc;l=771;drc=2a5aaed0ff3a0895c8551495c2656ed49baf742c;bpv=0;bpt=1}
 		let cf_png_format = self.format_map.get(CF_PNG);
 		if let Some(cf_png) = cf_png_format {
-			let png = image.to_png()?;
+			let png = image.to_png_sync()?;
 			if let Err(e) = set_without_clear(*cf_png, png.get_bytes()) {
 				eprintln!("set png image error, code = {e}");
 				// continue set bmp image
 			}
 		}
 		// 转换为 BMP 并设置到剪贴板
-		let bmp = image.to_bitmap().map_err(|e| {
+		let bmp = image.to_bmp_sync().map_err(|e| {
 			ClipboardError::PlatformError(format!("transform to bitmap error, code = {e}"))
 		})?;
 
@@ -409,11 +411,11 @@ impl Clipboard for ClipboardContext {
 			.map_err(|e| ClipboardError::PlatformError(format!("set image error, code = {e}")))
 	}
 
-	fn set_files(&self, files: Vec<String>) -> Result<()> {
+	fn set_files(&self, files: &[String]) -> Result<()> {
 		let _clip = ClipboardWin::new_attempts(10).map_err(|code| {
 			ClipboardError::PlatformError(format!("Open clipboard error, code = {code}"))
 		})?;
-		let res = set_file_list_with(&files, options::DoClear);
+		let res = set_file_list_with(files, options::DoClear);
 		res.map_err(|e| ClipboardError::PlatformError(format!("set files error, code = {e}")))
 	}
 
@@ -752,7 +754,7 @@ impl AsyncClipboard for ClipboardContext {
 	}
 
 	async fn get_raw(&self, format: &str) -> Result<Vec<u8>> {
-		self.get_buffer(format)
+		self.get_raw(format)
 	}
 
 	async fn get_text(&self) -> Result<String> {
@@ -760,7 +762,7 @@ impl AsyncClipboard for ClipboardContext {
 	}
 
 	async fn get_rtf(&self) -> Result<String> {
-		self.get_rich_text()
+		self.get_rtf()
 	}
 
 	async fn get_html(&self) -> Result<String> {
@@ -768,7 +770,7 @@ impl AsyncClipboard for ClipboardContext {
 	}
 
 	#[cfg(feature = "image")]
-	async fn get_image(&self) -> Result<RustImageData> {
+	async fn get_image(&self) -> Result<ClipboardImage> {
 		self.get_image()
 	}
 
@@ -781,7 +783,7 @@ impl AsyncClipboard for ClipboardContext {
 	}
 
 	async fn set_raw(&self, format: &str, data: &[u8]) -> Result<()> {
-		self.set_buffer(format, data.to_vec())
+		self.set_raw(format, data)
 	}
 
 	async fn set_text(&self, text: &str) -> Result<()> {
@@ -789,7 +791,7 @@ impl AsyncClipboard for ClipboardContext {
 	}
 
 	async fn set_rtf(&self, rtf: &str) -> Result<()> {
-		self.set_rich_text(rtf.to_string())
+		self.set_rtf(rtf.to_string())
 	}
 
 	async fn set_html(&self, html: &str) -> Result<()> {
@@ -797,7 +799,7 @@ impl AsyncClipboard for ClipboardContext {
 	}
 
 	#[cfg(feature = "image")]
-	async fn set_image(&self, image: RustImageData) -> Result<()> {
+	async fn set_image(&self, image: ClipboardImage) -> Result<()> {
 		self.set_image(image)
 	}
 
@@ -813,3 +815,50 @@ impl AsyncClipboard for ClipboardContext {
 		self.set(builder.build())
 	}
 }
+
+/// 启动 Windows 平台的异步剪贴板监听
+#[cfg(feature = "async")]
+pub fn start_async_watch(
+	sender: tokio::sync::mpsc::Sender<crate::ClipboardEvent>,
+) {
+	// 克隆sender用于在线程中移动
+	let sender_clone = sender.clone();
+
+	// 在单独的线程中运行监听循环
+	std::thread::spawn(move || {
+		use clipboard_win::Monitor;
+		use std::time::Duration;
+
+		let mut monitor = match Monitor::new() {
+			Ok(monitor) => monitor,
+			Err(e) => {
+				let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("Failed to create clipboard monitor: {}", e)));
+				return;
+			}
+		};
+
+		loop {
+			std::thread::sleep(std::time::Duration::from_millis(200));
+
+			match monitor.try_recv() {
+				Ok(true) => {
+					// 剪贴板已更改
+					// 发送事件到异步运行时
+					if let Err(_) = sender_clone.blocking_send(crate::ClipboardEvent::Changed { formats: vec![] }) {
+						// 接收端已关闭，退出循环
+						break;
+					}
+				}
+				Ok(false) => {
+					// 没有变化，继续循环
+					continue;
+				}
+				Err(e) => {
+					let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("Clipboard monitor error: {}", e)));
+					break;
+				}
+			}
+		}
+	});
+}
+

@@ -1,8 +1,9 @@
 use crate::{
 	common::Result, Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat,
+	AsyncClipboard, ClipboardEvent,
 };
 #[cfg(feature = "image")]
-use crate::{common::RustImage, RustImageData};
+use crate::common::ClipboardImage;
 use objc2::{rc::Retained, runtime::ProtocolObject};
 use objc2_foundation::{ns_string, NSArray, NSData, NSDictionary, NSString};
 use objc2_ui_kit::UIPasteboard;
@@ -12,6 +13,7 @@ use std::{
 	sync::mpsc::{self, Receiver, Sender},
 	time::Duration,
 };
+use tokio::sync::mpsc::Sender as TokioSender;
 
 pub struct ClipboardContext {
 	clipboard: Retained<UIPasteboard>,
@@ -138,7 +140,7 @@ impl ClipboardContext {
 				}
 				#[cfg(feature = "image")]
 				ClipboardContent::Image(image) => {
-					let png = image.to_png().unwrap();
+					let png = image.to_png_sync().unwrap();
 					let ns_data = NSData::with_bytes(png.get_bytes());
 					let image = unsafe { UIImage::imageWithData(&ns_data) };
 					if let Some(image) = image {
@@ -229,13 +231,13 @@ impl Clipboard for ClipboardContext {
 	}
 
 	#[cfg(feature = "image")]
-	fn get_image(&self) -> Result<RustImageData> {
+	fn get_image(&self) -> Result<ClipboardImage> {
 		let image = unsafe { self.clipboard.image() };
 		if let Some(image) = image {
 			let data = unsafe { UIImagePNGRepresentation(&image) };
 			if let Some(data) = data {
 				let bytes = unsafe { data.as_bytes_unchecked() };
-				Ok(RustImageData::from_bytes(bytes)?)
+				Ok(ClipboardImage::from_bytes_sync(bytes)?)
 			} else {
 				Err("No image data found".into())
 			}
@@ -279,19 +281,15 @@ impl Clipboard for ClipboardContext {
 	}
 
 	#[cfg(feature = "image")]
-	fn set_image(&self, image: RustImageData) -> Result<()> {
-		if image.is_empty() {
-			Err("Image is empty".into())
+	fn set_image(&self, image: ClipboardImage) -> Result<()> {
+		let png = image.to_png_sync()?;
+		let ns_data = NSData::with_bytes(png.get_bytes());
+		let image = unsafe { UIImage::imageWithData(&ns_data) };
+		if let Some(image) = image {
+			unsafe { self.clipboard.setImage(Some(&image)) };
+			Ok(())
 		} else {
-			let png = image.to_png()?;
-			let ns_data = NSData::with_bytes(png.get_bytes());
-			let image = unsafe { UIImage::imageWithData(&ns_data) };
-			if let Some(image) = image {
-				unsafe { self.clipboard.setImage(Some(&image)) };
-				Ok(())
-			} else {
-				Err("Failed to create image".into())
-			}
+			Err("Failed to create image".into())
 		}
 	}
 
@@ -304,3 +302,35 @@ impl Clipboard for ClipboardContext {
 		Ok(())
 	}
 }
+
+/// 启动 iOS 平台的异步剪贴板监听
+#[cfg(feature = "async")]
+pub fn start_async_watch(
+	sender: tokio::sync::mpsc::Sender<crate::ClipboardEvent>,
+) {
+	// 克隆sender用于在线程中移动
+	let sender_clone = sender.clone();
+
+	// 在单独的线程中运行监听循环
+	std::thread::spawn(move || {
+		let ios_clipboard = unsafe { UIPasteboard::generalPasteboard() };
+		let mut last_change_count = unsafe { ios_clipboard.changeCount() };
+
+		loop {
+			std::thread::sleep(std::time::Duration::from_millis(500));
+
+			let change_count = unsafe { ios_clipboard.changeCount() };
+			if last_change_count == 0 {
+				last_change_count = change_count;
+			} else if change_count != last_change_count {
+				// 发送事件到异步运行时
+				if let Err(_) = sender_clone.blocking_send(crate::ClipboardEvent::Changed { formats: vec![] }) {
+					// 接收端已关闭，退出循环
+					break;
+				}
+				last_change_count = change_count;
+			}
+		}
+	});
+}
+

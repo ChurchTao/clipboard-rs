@@ -21,9 +21,11 @@ clipboard-rs is a cross-platform library written in Rust for getting and setting
 
 ## Features
 
-- `default` - Enable image support
-- `image` - Enable basic image support
-- `async-image` - Enable modern async image processing with background thread support
+- `default` - Enable text support (basic clipboard functionality)
+- `text` - Enable text support (basic clipboard functionality)
+- `image` - Enable basic image support (depends on text)
+- `async` - Enable modern async API support
+- `async-image` - Enable modern async image processing with background thread support (depends on async and image)
 
 ### Platform Support Type Comparison Table
 
@@ -51,7 +53,7 @@ Add the following content to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-clipboard-rs = "0.3.1"
+clipboard-rs = "0.4.0"
 ```
 
 ## [CHANGELOG](CHANGELOG.md)
@@ -62,47 +64,57 @@ clipboard-rs = "0.3.1"
 
 [Examples](examples)
 
-### Simple Read and Write (Legacy API) ⚠️ *已废弃*
-
-> ⚠️ **警告**: 此API已在v0.4.0版本中标记为废弃，将在未来版本中移除。请使用下方的现代化异步API。
+### Simple Read and Write (Synchronous API)
 
 ```rust
-use clipboard_rs::{Clipboard, ClipboardContext, ContentFormat};
+use clipboard_rs::{SyncClipboardManager, ContentFormat};
 
-fn main() {
-	let ctx = ClipboardContext::new().unwrap();
-	let types = ctx.available_formats().unwrap();
-	println!("{:?}", types);
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create new synchronous clipboard manager (requires "text" feature)
+    let clipboard = SyncClipboardManager::new()?;
 
-	let has_rtf = ctx.has(ContentFormat::Rtf);
-	println!("has_rtf={}", has_rtf);
+    let formats = clipboard.available_formats()?;
+    println!("Available formats: {:?}", formats);
 
-	let rtf = ctx.get_rich_text().unwrap_or("".to_string());
+    let has_rtf = clipboard.has(ContentFormat::Rtf)?;
+    println!("has_rtf={}", has_rtf);
 
-	println!("rtf={}", rtf);
+    let rtf = clipboard.get_rtf().unwrap_or_default();
+    println!("rtf={}", rtf);
 
-	let has_html = ctx.has(ContentFormat::Html);
-	println!("has_html={}", has_html);
+    let has_html = clipboard.has(ContentFormat::Html)?;
+    println!("has_html={}", has_html);
 
-	let html = ctx.get_html().unwrap_or("".to_string());
+    let html = clipboard.get_html().unwrap_or_default();
+    println!("html={}", html);
 
-	println!("html={}", html);
+    let content = clipboard.get_text().unwrap_or_default();
+    println!("txt={}", content);
 
-	let content = ctx.get_text().unwrap_or("".to_string());
+    // Using the fluent builder API
+    clipboard
+        .set_with_builder(
+            clipboard
+                .build_content()
+                .with_text("Hello, World!")
+                .with_html("<h1>Hello, World!</h1>")
+                .with_rtf(r"{\rtf1\ansi\b Hello, World!}")
+        )?;
 
-	println!("txt={}", content);
+    Ok(())
 }
-
 ```
 
 ### Simple Read and Write (Modern Async API)
 
+> 💡 **提示**: 此API需要启用`async` feature。默认情况下，`text` feature已启用，因此您可以直接使用异步API。
+
 ```rust
-use clipboard_rs::{ClipboardManager, ContentFormat};
+use clipboard_rs::{AsyncClipboardManager, ContentFormat};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let clipboard = ClipboardManager::new().await?;
+    let clipboard = AsyncClipboardManager::new().await?;
 
     let formats = clipboard.available_formats().await?;
     println!("Available formats: {:?}", formats);
@@ -137,39 +149,67 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### Reading Images
+### Reading Images (Unified Synchronous API)
+
+> 💡 **提示**: 此API使用统一的ClipboardImage结构，提供同步方法处理图像，避免阻塞主线程。
 
 ```rust
-use clipboard_rs::{common::RustImage, Clipboard, ClipboardContext};
+use clipboard_rs::{SyncClipboardManager, ClipboardImage};
 
+#[cfg(target_os = "macos")]
+const TMP_PATH: &str = "/tmp/";
+#[cfg(target_os = "windows")]
+const TMP_PATH: &str = "C:\\Windows\\Temp\\";
+#[cfg(all(
+	unix,
+	not(any(
+		target_os = "macos",
+		target_os = "ios",
+		target_os = "android",
+		target_os = "emscripten"
+	))
+))]
 const TMP_PATH: &str = "/tmp/";
 
-fn main() {
-	let ctx = ClipboardContext::new().unwrap();
-	let types = ctx.available_formats().unwrap();
-	println!("{:?}", types);
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create new synchronous clipboard manager (requires "image" feature)
+    let clipboard = SyncClipboardManager::new()?;
 
-	let img = ctx.get_image();
+    // 从剪贴板获取图像
+    match clipboard.get_image() {
+        Ok(img) => {
+            // 保存图像到文件（同步方法）
+            img.save_to_path_sync(format!("{}test.png", TMP_PATH).as_str())?;
+            println!("Image saved to {}test.png", TMP_PATH);
 
-	match img {
-		Ok(img) => {
-			img.save_to_path(format!("{}test.png", TMP_PATH).as_str())
-				.unwrap();
+            // 创建缩略图（同步方法）
+            let resize_img = img.thumbnail_sync(300, 300)?;
+            resize_img.save_to_path_sync(format!("{}test_thumbnail.png", TMP_PATH).as_str())?;
+            println!("Thumbnail saved to {}test_thumbnail.png", TMP_PATH);
+        }
+        Err(err) => {
+            println!("Failed to get image from clipboard: {}", err);
+        }
+    }
 
-			let resize_img = img.thumbnail(300, 300).unwrap();
+    // 从文件创建图像并设置到剪贴板
+    match ClipboardImage::from_path_sync("input.png") {
+        Ok(image) => {
+            clipboard.set_image(image)?;
+            println!("Image set to clipboard successfully!");
+        }
+        Err(err) => {
+            println!("Failed to load image from file: {}", err);
+        }
+    }
 
-			resize_img
-				.save_to_path(format!("{}test_thumbnail.png", TMP_PATH).as_str())
-				.unwrap();
-		}
-		Err(err) => {
-			println!("err={}", err);
-		}
-	}
+    Ok(())
 }
 ```
 
 ### Reading Images (Modern Async API)
+
+> 💡 **提示**: 此API需要启用`async-image` feature，它会自动启用`async`和`image` features。使用统一的ClipboardImage结构，提供异步方法处理图像。
 
 To use the modern async image API, enable the `async-image` feature:
 
@@ -182,13 +222,13 @@ cargo run --example image_modern --features async-image
 //! Requires async-image feature: `cargo run --example image_modern --features async-image`
 
 #[cfg(feature = "async-image")]
-use clipboard_rs::{ClipboardImage, ClipboardManager};
+use clipboard_rs::{ClipboardImage, AsyncClipboardManager};
 
 #[cfg(feature = "async-image")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create new clipboard manager
-    let clipboard = ClipboardManager::new().await?;
+    let clipboard = AsyncClipboardManager::new().await?;
 
     // Create a simple image
     let mut image_buffer = image::RgbImage::new(100, 100);
@@ -205,17 +245,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         image::DynamicImage::ImageRgb8(image_buffer)
     );
 
-    // Set image to clipboard
+    // Set image to clipboard (using unified API)
     clipboard.set_image(clipboard_image).await?;
     println!("Image set to clipboard successfully!");
 
-    // Get image from clipboard
+    // Get image from clipboard (using unified API)
     match clipboard.get_image().await {
         Ok(image) => {
             println!("Got image from clipboard!");
             println!("Image dimensions: {:?}", image.dimensions());
 
-            // Save image to file
+            // Save image to file (async method)
             image.save_to_path("clipboard_image.png").await?;
             println!("Image saved to clipboard_image.png");
         }
@@ -232,29 +272,71 @@ fn main() {
     println!("This example requires the 'async-image' feature to be enabled.");
     println!("Run with: cargo run --example image_modern --features async-image");
 }
-
 ```
 
 ### Reading Any Format
 
 ```rust
-use clipboard_rs::{Clipboard, ClipboardContext};
+use clipboard_rs::{SyncClipboardManager, ContentFormat};
 
-fn main() {
-    let ctx = ClipboardContext::new().unwrap();
-    let types = ctx.available_formats().unwrap();
-    println!("{:?}", types);
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create new synchronous clipboard manager
+    let clipboard = SyncClipboardManager::new()?;
 
-    let buffer = ctx.get_buffer("public.html").unwrap();
+    let formats = clipboard.available_formats()?;
+    println!("Available formats: {:?}", formats);
 
-    let string = String::from_utf8(buffer).unwrap();
+    // Check if HTML format is available
+    let has_html = clipboard.has(ContentFormat::Html)?;
+    if has_html {
+        let html_content = clipboard.get_html()?;
+        println!("HTML content: {}", html_content);
+    }
 
-    println!("{}", string);
+    // Read raw data with custom format
+    if formats.contains(&"public.html".to_string()) {
+        let buffer = clipboard.get_raw("public.html")?;
+        let string = String::from_utf8(buffer)?;
+        println!("Raw HTML: {}", string);
+    }
+
+    Ok(())
 }
-
 ```
 
-### Listening to Clipboard Changes
+### Reading Any Format (Async API)
+
+```rust
+use clipboard_rs::{AsyncClipboardManager, ContentFormat};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create new async clipboard manager
+    let clipboard = AsyncClipboardManager::new().await?;
+
+    let formats = clipboard.available_formats().await?;
+    println!("Available formats: {:?}", formats);
+
+    // Check if HTML format is available
+    let has_html = clipboard.has(ContentFormat::Html).await?;
+    if has_html {
+        let html_content = clipboard.get_html().await?;
+        println!("HTML content: {}", html_content);
+    }
+
+    // Read raw data with custom format
+    if formats.contains(&"public.html".to_string()) {
+        let buffer = clipboard.get_raw("public.html").await?;
+        let string = String::from_utf8(buffer)?;
+        println!("Raw HTML: {}", string);
+    }
+
+    Ok(())
+}
+
+### Listening to Clipboard Changes (Legacy Synchronous API)
+
+> ⚠️ **警告**: 此API使用同步阻塞方式监听剪贴板变化。推荐使用现代化的异步监听API。
 
 ```rust
 use clipboard_rs::{
@@ -298,7 +380,100 @@ fn main() {
 	println!("start watch!");
 	watcher.start_watch();
 }
+```
 
+### Listening to Clipboard Changes (Modern Async API)
+
+> 💡 **提示**: 此API使用现代化的异步流模式监听剪贴板变化，不会阻塞主线程。
+
+```rust
+use clipboard_rs::{AsyncClipboardWatcher, ClipboardEvent, AsyncClipboardManager};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create new async clipboard manager
+    let clipboard = AsyncClipboardManager::new().await?;
+
+    // Start watching clipboard changes
+    let mut event_stream = clipboard.watch().await?;
+
+    println!("Clipboard watcher started. Try copying some text to see events!");
+
+    // Handle events in a loop
+    loop {
+        match event_stream.next().await {
+            Some(ClipboardEvent::Changed { formats }) => {
+                println!("Clipboard changed! Available formats: {:?}", formats);
+            }
+            Some(ClipboardEvent::Cleared) => {
+                println!("Clipboard cleared!");
+            }
+            Some(ClipboardEvent::Error(e)) => {
+                eprintln!("Clipboard error: {:?}", e);
+            }
+            None => {
+                println!("Event stream ended");
+                break;
+            }
+        }
+    }
+
+    Ok(())
+}
+```
+
+### Stopping Clipboard Watcher (Modern Async API)
+
+> 💡 **提示**: 新版本的异步API支持主动停止监听器，避免资源泄露。
+
+```rust
+use clipboard_rs::{AsyncClipboardWatcher, ClipboardEvent, AsyncClipboardManager};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create new async clipboard manager
+    let clipboard = AsyncClipboardManager::new().await?;
+
+    // Start watching clipboard changes
+    let mut event_stream = clipboard.watch().await?;
+
+    println!("Clipboard watcher started. Try copying some text to see events!");
+    println!("Press Enter to stop the watcher...");
+
+    // Handle events in a separate task
+    let handle_events = tokio::spawn(async move {
+        loop {
+            match event_stream.next().await {
+                Some(ClipboardEvent::Changed { formats }) => {
+                    println!("Clipboard changed! Available formats: {:?}", formats);
+                }
+                Some(ClipboardEvent::Cleared) => {
+                    println!("Clipboard cleared!");
+                }
+                Some(ClipboardEvent::Error(e)) => {
+                    eprintln!("Clipboard error: {:?}", e);
+                }
+                None => {
+                    println!("Event stream ended");
+                    break;
+                }
+            }
+        }
+    });
+
+    // Wait for user input to stop the watcher
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).unwrap();
+
+    // Stop the watcher
+    event_stream.stop();
+
+    // Wait for the event handling task to complete
+    let _ = handle_events.await;
+
+    Ok(())
+}
+```
 
 ```
 

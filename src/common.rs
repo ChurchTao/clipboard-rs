@@ -1,8 +1,7 @@
 #[cfg(feature = "image")]
 use image::imageops::FilterType;
 #[cfg(feature = "image")]
-use image::{ColorType, DynamicImage, GenericImageView, ImageFormat, RgbaImage};
-use std::io::Cursor;
+use image::{DynamicImage, GenericImageView, ImageFormat, RgbaImage};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -52,7 +51,7 @@ pub enum ClipboardContent {
 	Rtf(String),
 	Html(String),
 	#[cfg(feature = "image")]
-	Image(RustImageData),
+	Image(ClipboardImage),
 	Files(Vec<String>),
 	Other(String, Vec<u8>),
 }
@@ -93,7 +92,7 @@ impl ClipboardContentBuilder {
 
 	/// 添加图像内容
 	#[cfg(feature = "image")]
-	pub fn with_image(mut self, image: crate::RustImageData) -> Self {
+	pub fn with_image(mut self, image: ClipboardImage) -> Self {
 		self.contents.push(ClipboardContent::Image(image));
 		self
 	}
@@ -186,44 +185,24 @@ pub enum ContentFormat {
 	Other(String),
 }
 
+/// 统一的图像数据结构，提供同步和异步支持
 #[cfg(feature = "image")]
-pub struct RustImageData {
-	width: u32,
-	height: u32,
-	data: Option<DynamicImage>,
-}
-
-/// 现代化的图像数据结构，提供异步支持和更多功能
-#[cfg(feature = "async-image")]
 pub struct ClipboardImage {
 	inner: DynamicImage,
 }
 
-#[cfg(feature = "async-image")]
+#[cfg(feature = "image")]
 impl ClipboardImage {
-	/// 从文件路径创建图像
-	pub async fn from_path(path: impl AsRef<std::path::Path>) -> Result<Self> {
-		let path = path.as_ref().to_path_buf();
-		// 在后台线程中加载图像以避免阻塞
-		let image = tokio::task::spawn_blocking(move || {
-			image::open(&path).map_err(|e| ClipboardError::Image(e))
-		})
-		.await
-		.map_err(|e| ClipboardError::Io(e.into()))??;
-
+	/// 从文件路径创建图像（同步方法）
+	pub fn from_path_sync(path: impl AsRef<std::path::Path>) -> Result<Self> {
+		let image = image::open(path.as_ref()).map_err(|e| ClipboardError::Image(e))?;
 		Ok(ClipboardImage { inner: image })
 	}
 
-	/// 从字节数组创建图像
-	pub async fn from_bytes(bytes: &[u8]) -> Result<Self> {
-		let bytes = bytes.to_vec();
-		// 在后台线程中加载图像以避免阻塞
-		let image = tokio::task::spawn_blocking(move || {
-			image::load_from_memory(&bytes).map_err(|e| ClipboardError::InvalidData(e.to_string()))
-		})
-		.await
-		.map_err(|e| ClipboardError::Io(e.into()))??;
-
+	/// 从字节数组创建图像（同步方法）
+	pub fn from_bytes_sync(bytes: &[u8]) -> Result<Self> {
+		let image = image::load_from_memory(bytes)
+			.map_err(|e| ClipboardError::InvalidData(e.to_string()))?;
 		Ok(ClipboardImage { inner: image })
 	}
 
@@ -247,7 +226,108 @@ impl ClipboardImage {
 		self.inner.height()
 	}
 
-	/// 缩略图处理
+	/// 缩略图处理（同步方法）
+	pub fn thumbnail_sync(&self, width: u32, height: u32) -> Result<Self> {
+		let thumbnail = self.inner.thumbnail(width, height);
+		Ok(ClipboardImage { inner: thumbnail })
+	}
+
+	/// 调整图像大小（同步方法）
+	pub fn resize_sync(&self, width: u32, height: u32, filter: FilterType) -> Result<Self> {
+		let resized = self.inner.resize_exact(width, height, filter);
+		Ok(ClipboardImage { inner: resized })
+	}
+
+	/// 保存到文件路径（同步方法）
+	pub fn save_to_path_sync(&self, path: impl AsRef<std::path::Path>) -> Result<()> {
+		self.inner
+			.save(path.as_ref())
+			.map_err(|e| ClipboardError::Image(e))
+	}
+
+	/// 转换为 PNG 格式（同步方法）
+	pub fn to_png_sync(&self) -> Result<Vec<u8>> {
+		self.encode_sync(ImageFormat::Png)
+	}
+
+	/// 转换为 JPEG 格式（同步方法）
+	pub fn to_jpeg_sync(&self, quality: u8) -> Result<Vec<u8>> {
+		self.encode_with_quality_sync(ImageFormat::Jpeg, quality)
+	}
+
+	/// 转换为 BMP 格式（同步方法）
+	pub fn to_bmp_sync(&self) -> Result<Vec<u8>> {
+		self.encode_sync(ImageFormat::Bmp)
+	}
+
+	/// 编码为指定格式（同步方法）
+	pub fn encode_sync(&self, format: ImageFormat) -> Result<Vec<u8>> {
+		self.encode_with_quality_sync(format, 90)
+	}
+
+	/// 编码为指定格式并设置质量（同步方法）
+	pub fn encode_with_quality_sync(&self, format: ImageFormat, quality: u8) -> Result<Vec<u8>> {
+		let mut buffer = Vec::new();
+		let mut cursor = std::io::Cursor::new(&mut buffer);
+
+		match format {
+			ImageFormat::Jpeg => {
+				let mut encoder =
+					image::codecs::jpeg::JpegEncoder::new_with_quality(cursor, quality);
+				encoder
+					.encode_image(&self.inner)
+					.map_err(|e| ClipboardError::Image(e))?;
+			}
+			_ => {
+				self.inner
+					.write_to(&mut cursor, format)
+					.map_err(|e| ClipboardError::Image(e))?;
+			}
+		}
+
+		Ok(buffer)
+	}
+
+	/// 获取 DynamicImage
+	pub fn get_dynamic_image(&self) -> &DynamicImage {
+		&self.inner
+	}
+
+	/// 转换为 RGBA8 格式
+	pub fn to_rgba8(&self) -> RgbaImage {
+		self.inner.to_rgba8()
+	}
+
+	/// 从文件路径创建图像（异步方法）
+	#[cfg(feature = "async")]
+	pub async fn from_path(path: impl AsRef<std::path::Path>) -> Result<Self> {
+		let path = path.as_ref().to_path_buf();
+		// 在后台线程中加载图像以避免阻塞
+		let image = tokio::task::spawn_blocking(move || {
+			image::open(&path).map_err(|e| ClipboardError::Image(e))
+		})
+		.await
+		.map_err(|e| ClipboardError::Io(e.into()))??;
+
+		Ok(ClipboardImage { inner: image })
+	}
+
+	/// 从字节数组创建图像（异步方法）
+	#[cfg(feature = "async")]
+	pub async fn from_bytes(bytes: &[u8]) -> Result<Self> {
+		let bytes = bytes.to_vec();
+		// 在后台线程中加载图像以避免阻塞
+		let image = tokio::task::spawn_blocking(move || {
+			image::load_from_memory(&bytes).map_err(|e| ClipboardError::InvalidData(e.to_string()))
+		})
+		.await
+		.map_err(|e| ClipboardError::Io(e.into()))??;
+
+		Ok(ClipboardImage { inner: image })
+	}
+
+	/// 缩略图处理（异步方法）
+	#[cfg(feature = "async")]
 	pub async fn thumbnail(&self, width: u32, height: u32) -> Result<Self> {
 		let image = self.inner.clone();
 		let thumbnail = tokio::task::spawn_blocking(move || image.thumbnail(width, height))
@@ -257,7 +337,8 @@ impl ClipboardImage {
 		Ok(ClipboardImage { inner: thumbnail })
 	}
 
-	/// 调整图像大小
+	/// 调整图像大小（异步方法）
+	#[cfg(feature = "async")]
 	pub async fn resize(&self, width: u32, height: u32, filter: FilterType) -> Result<Self> {
 		let image = self.inner.clone();
 		let resized =
@@ -268,7 +349,8 @@ impl ClipboardImage {
 		Ok(ClipboardImage { inner: resized })
 	}
 
-	/// 保存到文件路径
+	/// 保存到文件路径（异步方法）
+	#[cfg(feature = "async")]
 	pub async fn save_to_path(&self, path: impl AsRef<std::path::Path>) -> Result<()> {
 		let image = self.inner.clone();
 		let path = path.as_ref().to_path_buf();
@@ -281,27 +363,32 @@ impl ClipboardImage {
 		Ok(())
 	}
 
-	/// 转换为 PNG 格式
+	/// 转换为 PNG 格式（异步方法）
+	#[cfg(feature = "async")]
 	pub async fn to_png(&self) -> Result<Vec<u8>> {
 		self.encode(ImageFormat::Png).await
 	}
 
-	/// 转换为 JPEG 格式
+	/// 转换为 JPEG 格式（异步方法）
+	#[cfg(feature = "async")]
 	pub async fn to_jpeg(&self, quality: u8) -> Result<Vec<u8>> {
 		self.encode_with_quality(ImageFormat::Jpeg, quality).await
 	}
 
-	/// 转换为 BMP 格式
+	/// 转换为 BMP 格式（异步方法）
+	#[cfg(feature = "async")]
 	pub async fn to_bmp(&self) -> Result<Vec<u8>> {
 		self.encode(ImageFormat::Bmp).await
 	}
 
-	/// 编码为指定格式
+	/// 编码为指定格式（异步方法）
+	#[cfg(feature = "async")]
 	pub async fn encode(&self, format: ImageFormat) -> Result<Vec<u8>> {
 		self.encode_with_quality(format, 90).await
 	}
 
-	/// 编码为指定格式并设置质量
+	/// 编码为指定格式并设置质量（异步方法）
+	#[cfg(feature = "async")]
 	pub async fn encode_with_quality(&self, format: ImageFormat, quality: u8) -> Result<Vec<u8>> {
 		let image = self.inner.clone();
 		let bytes = tokio::task::spawn_blocking(move || {
@@ -329,222 +416,5 @@ impl ClipboardImage {
 		.map_err(|e| ClipboardError::Io(e.into()))??;
 
 		Ok(bytes)
-	}
-
-	/// 获取 DynamicImage
-	pub fn get_dynamic_image(&self) -> &DynamicImage {
-		&self.inner
-	}
-
-	/// 转换为 RGBA8 格式
-	pub fn to_rgba8(&self) -> RgbaImage {
-		self.inner.to_rgba8()
-	}
-}
-
-/// 此处的 `RustImageBuffer` 已经是带有图片格式的字节流，例如 png,jpeg;
-#[cfg(feature = "image")]
-pub struct RustImageBuffer(Vec<u8>);
-
-#[cfg(feature = "image")]
-pub trait RustImage: Sized {
-	/// create an empty image
-	fn empty() -> Self;
-
-	fn is_empty(&self) -> bool;
-
-	/// Read image from file path
-	fn from_path(path: &str) -> Result<Self>;
-
-	/// Create a new image from a byte slice
-	fn from_bytes(bytes: &[u8]) -> Result<Self>;
-
-	fn from_dynamic_image(image: DynamicImage) -> Self;
-
-	/// width and height
-	fn get_size(&self) -> (u32, u32);
-
-	/// Scale this image down to fit within a specific size.
-	/// Returns a new image. The image's aspect ratio is preserved.
-	/// The image is scaled to the maximum possible size that fits
-	/// within the bounds specified by `nwidth` and `nheight`.
-	///
-	/// This method uses a fast integer algorithm where each source
-	/// pixel contributes to exactly one target pixel.
-	/// May give aliasing artifacts if new size is close to old size.
-	fn thumbnail(&self, width: u32, height: u32) -> Result<Self>;
-
-	/// en: Adjust the size of the image without retaining the aspect ratio
-	/// zh: 调整图片大小，不保留长宽比
-	fn resize(&self, width: u32, height: u32, filter: FilterType) -> Result<Self>;
-
-	fn encode_image(
-		&self,
-		target_color_type: ColorType,
-		format: ImageFormat,
-	) -> Result<RustImageBuffer>;
-
-	fn to_jpeg(&self) -> Result<RustImageBuffer>;
-
-	/// en: Convert to png format, the returned image is a new image, and the data itself will not be modified
-	/// zh: 转为 png 格式,返回的为新的图片，本身数据不会修改
-	fn to_png(&self) -> Result<RustImageBuffer>;
-
-	#[cfg(target_os = "windows")]
-	fn to_bitmap(&self) -> Result<RustImageBuffer>;
-
-	fn save_to_path(&self, path: &str) -> Result<()>;
-
-	fn get_dynamic_image(&self) -> Result<DynamicImage>;
-
-	fn to_rgba8(&self) -> Result<RgbaImage>;
-}
-
-#[cfg(feature = "image")]
-impl RustImage for RustImageData {
-	fn empty() -> Self {
-		RustImageData {
-			width: 0,
-			height: 0,
-			data: None,
-		}
-	}
-
-	fn is_empty(&self) -> bool {
-		self.data.is_none()
-	}
-
-	fn from_path(path: &str) -> Result<Self> {
-		let image = image::open(path)?;
-		let (width, height) = image.dimensions();
-		Ok(RustImageData {
-			width,
-			height,
-			data: Some(image),
-		})
-	}
-
-	fn from_bytes(bytes: &[u8]) -> Result<Self> {
-		let image = image::load_from_memory(bytes)?;
-		let (width, height) = image.dimensions();
-		Ok(RustImageData {
-			width,
-			height,
-			data: Some(image),
-		})
-	}
-
-	fn from_dynamic_image(image: DynamicImage) -> Self {
-		let (width, height) = image.dimensions();
-		RustImageData {
-			width,
-			height,
-			data: Some(image),
-		}
-	}
-
-	fn get_size(&self) -> (u32, u32) {
-		(self.width, self.height)
-	}
-
-	fn thumbnail(&self, width: u32, height: u32) -> Result<Self> {
-		match &self.data {
-			Some(image) => {
-				let resized = image.thumbnail(width, height);
-				Ok(RustImageData {
-					width: resized.width(),
-					height: resized.height(),
-					data: Some(resized),
-				})
-			}
-			None => Err(ClipboardError::Empty),
-		}
-	}
-
-	fn resize(&self, width: u32, height: u32, filter: FilterType) -> Result<Self> {
-		match &self.data {
-			Some(image) => {
-				let resized = image.resize_exact(width, height, filter);
-				Ok(RustImageData {
-					width: resized.width(),
-					height: resized.height(),
-					data: Some(resized),
-				})
-			}
-			None => Err(ClipboardError::Empty),
-		}
-	}
-
-	fn save_to_path(&self, path: &str) -> Result<()> {
-		match &self.data {
-			Some(image) => {
-				image.save(path)?;
-				Ok(())
-			}
-			None => Err(ClipboardError::Empty),
-		}
-	}
-
-	fn get_dynamic_image(&self) -> Result<DynamicImage> {
-		match &self.data {
-			Some(image) => Ok(image.clone()),
-			None => Err(ClipboardError::Empty),
-		}
-	}
-
-	fn to_rgba8(&self) -> Result<RgbaImage> {
-		match &self.data {
-			Some(image) => Ok(image.to_rgba8()),
-			None => Err(ClipboardError::Empty),
-		}
-	}
-
-	// 私有辅助函数，处理图像格式转换和编码
-	fn encode_image(
-		&self,
-		target_color_type: ColorType,
-		format: ImageFormat,
-	) -> Result<RustImageBuffer> {
-		let image = self.data.as_ref().ok_or(ClipboardError::Empty)?;
-
-		let mut bytes = Vec::new();
-		match (image.color(), target_color_type) {
-			(ColorType::Rgba8, ColorType::Rgb8) => image
-				.to_rgb8()
-				.write_to(&mut Cursor::new(&mut bytes), format)?,
-			(_, ColorType::Rgba8) => image
-				.to_rgba8()
-				.write_to(&mut Cursor::new(&mut bytes), format)?,
-			_ => image.write_to(&mut Cursor::new(&mut bytes), format)?,
-		};
-		Ok(RustImageBuffer(bytes))
-	}
-
-	fn to_jpeg(&self) -> Result<RustImageBuffer> {
-		// JPEG 需要 RGB 格式（不支持 alpha 通道）
-		self.encode_image(ColorType::Rgb8, ImageFormat::Jpeg)
-	}
-
-	fn to_png(&self) -> Result<RustImageBuffer> {
-		// PNG 使用 RGBA 格式以支持透明度
-		self.encode_image(ColorType::Rgba8, ImageFormat::Png)
-	}
-
-	#[cfg(target_os = "windows")]
-	fn to_bitmap(&self) -> Result<RustImageBuffer> {
-		// BMP 使用 RGBA 格式
-		self.encode_image(ColorType::Rgba8, ImageFormat::Bmp)
-	}
-}
-
-#[cfg(feature = "image")]
-impl RustImageBuffer {
-	pub fn get_bytes(&self) -> &[u8] {
-		&self.0
-	}
-
-	pub fn save_to_path(&self, path: &str) -> Result<()> {
-		std::fs::write(path, &self.0)?;
-		Ok(())
 	}
 }

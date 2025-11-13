@@ -1,14 +1,14 @@
 use crate::{
 	common::{ClipboardError, Result},
-	// #[cfg(feature = "image")]
 	AsyncClipboard,
 	ClipboardContent,
 	ClipboardHandler,
 	ContentFormat,
+	ClipboardEvent,
 };
 
 #[cfg(feature = "image")]
-use crate::{common::RustImage, RustImageData};
+use crate::common::ClipboardImage;
 
 use crate::{Clipboard, ClipboardWatcher};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -31,6 +31,7 @@ use x11rb::{
 	wrapper::ConnectionExt as _,
 	COPY_DEPTH_FROM_PARENT, CURRENT_TIME,
 };
+use tokio::sync::mpsc::Sender as TokioSender;
 
 x11rb::atom_manager! {
 	pub Atoms: AtomCookies {
@@ -96,7 +97,7 @@ impl AsyncClipboard for ClipboardContext {
 	}
 
 	async fn get_raw(&self, format: &str) -> Result<Vec<u8>> {
-		self.get_buffer(format)
+		self.get_raw(format)
 	}
 
 	async fn get_text(&self) -> Result<String> {
@@ -113,7 +114,7 @@ impl AsyncClipboard for ClipboardContext {
 	}
 
 	#[cfg(feature = "image")]
-	async fn get_image(&self) -> Result<RustImageData> {
+	async fn get_image(&self) -> Result<ClipboardImage> {
 		self.get_image()
 	}
 
@@ -143,12 +144,12 @@ impl AsyncClipboard for ClipboardContext {
 	}
 
 	#[cfg(feature = "image")]
-	async fn set_image(&self, image: RustImageData) -> Result<()> {
+	async fn set_image(&self, image: ClipboardImage) -> Result<()> {
 		self.set_image(image)
 	}
 
 	async fn set_files(&self, files: &[String]) -> Result<()> {
-		self.set_files(files.to_vec())
+		self.set_files(files)
 	}
 
 	async fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
@@ -593,7 +594,7 @@ impl Clipboard for ClipboardContext {
 		self.write(vec![])
 	}
 
-	fn get_buffer(&self, format: &str) -> Result<Vec<u8>> {
+	fn get_raw(&self, format: &str) -> Result<Vec<u8>> {
 		let atom = self.inner.server.get_atom(format);
 		match atom {
 			Ok(atom) => self.read(&atom),
@@ -610,7 +611,7 @@ impl Clipboard for ClipboardContext {
 		)
 	}
 
-	fn get_rich_text(&self) -> Result<String> {
+	fn get_rtf(&self) -> Result<String> {
 		let atoms = self.inner.server.atoms;
 		let rtf_data = self.read(&atoms.RTF);
 		rtf_data.map_or_else(
@@ -629,12 +630,12 @@ impl Clipboard for ClipboardContext {
 	}
 
 	#[cfg(feature = "image")]
-	fn get_image(&self) -> Result<crate::RustImageData> {
+	fn get_image(&self) -> Result<ClipboardImage> {
 		let atoms = self.inner.server.atoms;
 		let image_bytes = self.read(&atoms.PNG_MIME);
 		match image_bytes {
 			Ok(bytes) => {
-				let image = RustImageData::from_bytes(&bytes);
+				let image = ClipboardImage::from_bytes_sync(&bytes);
 				match image {
 					Ok(image) => Ok(image),
 					Err(_) => Err(ClipboardError::InvalidData("Invalid image data".into())),
@@ -699,16 +700,16 @@ impl Clipboard for ClipboardContext {
 		Ok(contents)
 	}
 
-	fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
+	fn set_raw(&self, format: &str, data: &[u8]) -> Result<()> {
 		let atom = self.inner.server_for_write.get_atom(format)?;
 		let data = ClipboardData {
 			format: atom,
-			data: buffer,
+			data: data.to_vec(),
 		};
 		self.write(vec![data])
 	}
 
-	fn set_text(&self, text: String) -> Result<()> {
+	fn set_text(&self, text: &str) -> Result<()> {
 		let atoms = self.inner.server_for_write.atoms;
 		let text_bytes = text.as_bytes().to_vec();
 
@@ -719,9 +720,9 @@ impl Clipboard for ClipboardContext {
 		self.write(vec![data])
 	}
 
-	fn set_rich_text(&self, text: String) -> Result<()> {
+	fn set_rtf(&self, rtf: &str) -> Result<()> {
 		let atoms = self.inner.server_for_write.atoms;
-		let text_bytes = text.as_bytes().to_vec();
+		let text_bytes = rtf.as_bytes().to_vec();
 
 		let data = ClipboardData {
 			format: atoms.RTF,
@@ -730,7 +731,7 @@ impl Clipboard for ClipboardContext {
 		self.write(vec![data])
 	}
 
-	fn set_html(&self, html: String) -> Result<()> {
+	fn set_html(&self, html: &str) -> Result<()> {
 		let atoms = self.inner.server_for_write.atoms;
 		let html_bytes = html.as_bytes().to_vec();
 
@@ -742,9 +743,9 @@ impl Clipboard for ClipboardContext {
 	}
 
 	#[cfg(feature = "image")]
-	fn set_image(&self, image: RustImageData) -> Result<()> {
+	fn set_image(&self, image: ClipboardImage) -> Result<()> {
 		let atoms = self.inner.server_for_write.atoms;
-		let image_png = image.to_png()?;
+		let image_png = image.to_png_sync()?;
 		let data = ClipboardData {
 			format: atoms.PNG_MIME,
 			data: image_png.get_bytes().to_vec(),
@@ -752,9 +753,9 @@ impl Clipboard for ClipboardContext {
 		self.write(vec![data])
 	}
 
-	fn set_files(&self, files: Vec<String>) -> Result<()> {
+	fn set_files(&self, files: &[String]) -> Result<()> {
 		let atoms = self.inner.server_for_write.atoms;
-		let data = file_uri_list_to_clipboard_data(files, atoms);
+		let data = file_uri_list_to_clipboard_data(files.to_vec(), atoms);
 		self.write(data)
 	}
 
@@ -783,7 +784,7 @@ impl Clipboard for ClipboardContext {
 				}
 				#[cfg(feature = "image")]
 				ClipboardContent::Image(image) => {
-					let image_png = image.to_png()?;
+					let image_png = image.to_png_sync()?;
 					data.push(ClipboardData {
 						format: atoms.PNG_MIME,
 						data: image_png.get_bytes().to_vec(),
@@ -1020,3 +1021,100 @@ fn file_uri_list_to_clipboard_data(file_list: Vec<String>, atoms: Atoms) -> Vec<
 		},
 	]
 }
+
+/// 启动 Linux X11 平台的异步剪贴板监听
+#[cfg(feature = "async")]
+pub fn start_async_watch(
+	sender: tokio::sync::mpsc::Sender<crate::ClipboardEvent>,
+) {
+	// 克隆sender用于在线程中移动
+	let sender_clone = sender.clone();
+
+	// 在单独的线程中运行监听循环
+	std::thread::spawn(move || {
+		use x11rb::protocol::Event;
+		use x11rb::protocol::xfixes;
+		use std::time::Duration;
+
+		// 创建新的 X11 连接用于监听
+		let (conn, screen_num) = match x11rb::connect(None) {
+			Ok(conn) => conn,
+			Err(e) => {
+				let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("Failed to connect to X11: {}", e)));
+				return;
+			}
+		};
+
+		let screen = match conn.setup().roots.get(screen_num) {
+			Some(screen) => screen,
+			None => {
+				let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error("Failed to get X11 screen".to_string()));
+				return;
+			}
+		};
+
+		// 初始化 xfixes 扩展
+		if let Err(e) = xfixes::query_version(&conn, 5, 0) {
+			let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("Failed to query xfixes version: {}", e)));
+			return;
+		}
+
+		// 选择剪贴板事件
+		let clipboard_atom = match conn.intern_atom(false, b"CLIPBOARD") {
+			Ok(cookie) => match cookie.reply() {
+				Ok(reply) => reply.atom,
+				Err(e) => {
+					let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("Failed to get CLIPBOARD atom: {}", e)));
+					return;
+				}
+			},
+			Err(e) => {
+				let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("Failed to intern CLIPBOARD atom: {}", e)));
+				return;
+			}
+		};
+
+		if let Err(e) = xfixes::select_selection_input(
+			&conn,
+			screen.root,
+			clipboard_atom,
+			xfixes::SelectionEventMask::SET_SELECTION_OWNER
+				| xfixes::SelectionEventMask::SELECTION_CLIENT_CLOSE
+				| xfixes::SelectionEventMask::SELECTION_WINDOW_DESTROY,
+		) {
+			let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("Failed to select selection input: {}", e)));
+			return;
+		}
+
+		if let Err(e) = conn.flush() {
+			let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("Failed to flush X11 connection: {}", e)));
+			return;
+		}
+
+		loop {
+			std::thread::sleep(std::time::Duration::from_millis(200));
+
+			match conn.poll_for_event() {
+				Ok(Some(event)) => {
+					if let Event::XfixesSelectionNotify(_) = event {
+						// 剪贴板已更改
+						// 发送事件到异步运行时
+						if let Err(_) = sender_clone.blocking_send(crate::ClipboardEvent::Changed { formats: vec![] }) {
+							// 接收端已关闭，退出循环
+							break;
+						}
+					}
+				}
+				Ok(None) => {
+					// 没有事件，继续循环
+					continue;
+				}
+				Err(e) => {
+					let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("X11 event polling error: {}", e)));
+					break;
+				}
+			}
+		}
+	});
+}
+

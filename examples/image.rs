@@ -1,6 +1,6 @@
 #[cfg(target_os = "linux")]
 use clipboard_rs::ClipboardContextX11Options;
-use clipboard_rs::{common::RustImage, Clipboard, ClipboardContext};
+use clipboard_rs::{Clipboard, ClipboardImage, SyncClipboardManager};
 
 #[cfg(target_os = "macos")]
 const TMP_PATH: &str = "/tmp/";
@@ -21,40 +21,40 @@ const TMP_PATH: &str = "/tmp/";
 const TMP_PATH: &str = "/tmp/";
 
 #[cfg(target_os = "linux")]
-fn setup_clipboard() -> ClipboardContext {
-	ClipboardContext::new_with_options(ClipboardContextX11Options { read_timeout: None }).unwrap()
+fn setup_clipboard() -> clipboard_rs::ClipboardContext {
+	clipboard_rs::ClipboardContext::new_with_options(clipboard_rs::ClipboardContextX11Options {
+		read_timeout: None,
+	})
+	.unwrap()
 }
 
 #[cfg(not(target_os = "linux"))]
-fn setup_clipboard() -> ClipboardContext {
-	ClipboardContext::new().unwrap()
+fn setup_clipboard() -> clipboard_rs::ClipboardContext {
+	clipboard_rs::ClipboardContext::new().unwrap()
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let ctx = setup_clipboard();
 
-	let types = ctx.available_formats().unwrap();
-	println!("{:?}", types);
+	let types = ctx.available_formats()?;
+	println!("Available formats: {:?}", types);
 
-	let img = ctx.get_image();
+	// Create new synchronous clipboard manager (requires "image" feature)
+	let clipboard = SyncClipboardManager::new()?;
 
-	match img {
+	match clipboard.get_image() {
 		Ok(img) => {
-			let _ = img
-				.save_to_path(format!("{}test.png", TMP_PATH).as_str())
-				.map_err(|e| println!("save test.png err={}", e));
+			img.save_to_path_sync(format!("{}test.png", TMP_PATH).as_str())?;
+			println!("Image saved to {}test.png", TMP_PATH);
 
-			let resize_img = img
-				.thumbnail(300, 300)
-				.map_err(|e| println!("thumbnail err={}", e))
-				.unwrap();
-
-			let _ = resize_img
-				.save_to_path(format!("{}test_thumbnail.png", TMP_PATH).as_str())
-				.map_err(|e| println!("save test_thumbnail.png err={}", e));
+			let resize_img = img.thumbnail_sync(300, 300)?;
+			resize_img.save_to_path_sync(format!("{}test_thumbnail.png", TMP_PATH).as_str())?;
+			println!("Thumbnail saved to {}test_thumbnail.png", TMP_PATH);
 		}
 		Err(err) => {
-			println!("err={}", err);
+			println!("Failed to get image from clipboard: {}", err);
 		}
 	}
+
+	Ok(())
 }

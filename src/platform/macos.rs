@@ -1,97 +1,15 @@
-use crate::common::{ClipboardError, Result};
 #[cfg(feature = "image")]
-use crate::common::{RustImage, RustImageData};
-use crate::{
-	AsyncClipboard, Clipboard, ClipboardContent, ClipboardContentBuilder, ClipboardHandler,
-	ClipboardWatcher, ContentFormat,
-};
+use crate::common::ClipboardImage;
+use crate::common::{ClipboardError, Result};
+use crate::{AsyncClipboard, Clipboard, ClipboardContent, ClipboardContentBuilder, ContentFormat};
 use objc2::rc::Retained;
-use objc2::AllocAnyThread;
-use objc2::ClassType;
-use objc2::{rc::autoreleasepool, runtime::ProtocolObject};
-use objc2_app_kit::{
-	NSImage, NSPasteboard, NSPasteboardItem, NSPasteboardType, NSPasteboardTypeFileURL,
-	NSPasteboardTypeHTML, NSPasteboardTypePNG, NSPasteboardTypeRTF, NSPasteboardTypeString,
-	NSPasteboardTypeTIFF,
-};
+use objc2::{rc::autoreleasepool, runtime::ProtocolObject, AllocAnyThread, ClassType};
+use objc2_app_kit::{NSImage, NSPasteboard, NSPasteboardItem, NSPasteboardType, NSPasteboardTypeFileURL, NSPasteboardTypeHTML, NSPasteboardTypePNG, NSPasteboardTypeRTF, NSPasteboardTypeString, NSPasteboardTypeTIFF};
 use objc2_foundation::{NSArray, NSData, NSString, NSURL};
 use std::ffi::c_void;
-use std::sync::mpsc::{self, Receiver, Sender};
-use std::time::Duration;
-use std::vec;
 
 pub struct ClipboardContext {
 	pasteboard: Retained<NSPasteboard>,
-}
-
-pub struct ClipboardWatcherContext<T: ClipboardHandler> {
-	pasteboard: Retained<NSPasteboard>,
-	handlers: Vec<T>,
-	stop_signal: Sender<()>,
-	stop_receiver: Receiver<()>,
-	running: bool,
-}
-
-unsafe impl<T: ClipboardHandler> Send for ClipboardWatcherContext<T> {}
-
-impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
-	pub fn new() -> Result<Self> {
-		let ns_pasteboard = NSPasteboard::generalPasteboard();
-		let (tx, rx) = mpsc::channel();
-		Ok(ClipboardWatcherContext {
-			pasteboard: ns_pasteboard,
-			handlers: Vec::new(),
-			stop_signal: tx,
-			stop_receiver: rx,
-			running: false,
-		})
-	}
-}
-
-impl<T: ClipboardHandler> ClipboardWatcher<T> for ClipboardWatcherContext<T> {
-	fn add_handler(&mut self, handler: T) -> &mut Self {
-		self.handlers.push(handler);
-		self
-	}
-
-	fn start_watch(&mut self) {
-		if self.running {
-			println!("already start watch!");
-			return;
-		}
-		if self.handlers.is_empty() {
-			println!("no handler, no need to start watch!");
-			return;
-		}
-		self.running = true;
-		let mut last_change_count = self.pasteboard.changeCount();
-		loop {
-			// if receive stop signal, break loop
-			if self
-				.stop_receiver
-				.recv_timeout(Duration::from_millis(500))
-				.is_ok()
-			{
-				break;
-			}
-			let change_count = self.pasteboard.changeCount();
-			if last_change_count == 0 {
-				last_change_count = change_count;
-			} else if change_count != last_change_count {
-				self.handlers
-					.iter_mut()
-					.for_each(|handler| handler.on_clipboard_change());
-				last_change_count = change_count;
-			}
-		}
-		self.running = false;
-	}
-
-	fn get_shutdown_channel(&self) -> WatcherShutdown {
-		WatcherShutdown {
-			stop_signal: self.stop_signal.clone(),
-		}
-	}
 }
 
 impl ClipboardContext {
@@ -120,7 +38,7 @@ impl ClipboardContext {
 		})
 	}
 
-	fn set_files(&self, files: &[String]) -> Result<()> {
+	fn set_files(&self, files: &[&str]) -> Result<()> {
 		autoreleasepool(|_| {
 			// Build NSArray<NSURL> and write via writeObjects for better compatibility
 			let urls: Vec<Retained<NSURL>> = files
@@ -128,14 +46,14 @@ impl ClipboardContext {
 				.filter_map(|file_path| {
 					// Normalize to local filesystem path, and verify it exists
 					let local_path = if file_path.starts_with("file://") {
-						file_path.trim_start_matches("file://").to_string()
+						file_path.trim_start_matches("file://")
 					} else {
-						file_path.clone()
+						file_path
 					};
-					if !std::path::Path::new(&local_path).exists() {
+					if !std::path::Path::new(local_path).exists() {
 						return None;
 					}
-					let ns_path = NSString::from_str(&local_path);
+					let ns_path = NSString::from_str(local_path);
 					// NSURL::fileURLWithPath returns a retained NSURL
 					let url = NSURL::fileURLWithPath(&ns_path);
 					Some(url)
@@ -192,8 +110,8 @@ impl ClipboardContext {
 					}
 					#[cfg(feature = "image")]
 					ClipboardContent::Image(image) => {
-						if let Ok(png_buffer) = image.to_png() {
-							let bytes = png_buffer.get_bytes();
+						if let Ok(png_buffer) = image.to_png_sync() {
+							let bytes = &png_buffer;
 							let ns_data = unsafe {
 								NSData::dataWithBytes_length(
 									bytes.as_ptr() as *mut c_void,
@@ -205,8 +123,8 @@ impl ClipboardContext {
 						};
 					}
 					ClipboardContent::Files(files) => {
-						// Files are set seperately
-						let _ = self.set_files(files);
+						let string_files: Vec<&str> = files.iter().map(|f| f.as_str()).collect();
+						let _ = self.set_files(&string_files);
 					}
 					ClipboardContent::Other(format, buffer) => {
 						let ns_data = unsafe {
@@ -250,7 +168,7 @@ impl AsyncClipboard for ClipboardContext {
 	}
 
 	async fn get_raw(&self, format: &str) -> Result<Vec<u8>> {
-		Clipboard::get_buffer(self, format)
+		Clipboard::get_raw(self, format)
 	}
 
 	async fn get_text(&self) -> Result<String> {
@@ -258,7 +176,7 @@ impl AsyncClipboard for ClipboardContext {
 	}
 
 	async fn get_rtf(&self) -> Result<String> {
-		Clipboard::get_rich_text(self)
+		Clipboard::get_rtf(self)
 	}
 
 	async fn get_html(&self) -> Result<String> {
@@ -266,7 +184,7 @@ impl AsyncClipboard for ClipboardContext {
 	}
 
 	#[cfg(feature = "image")]
-	async fn get_image(&self) -> Result<RustImageData> {
+	async fn get_image(&self) -> Result<ClipboardImage> {
 		Clipboard::get_image(self)
 	}
 
@@ -279,36 +197,32 @@ impl AsyncClipboard for ClipboardContext {
 	}
 
 	async fn set_raw(&self, format: &str, data: &[u8]) -> Result<()> {
-		Clipboard::set_buffer(self, format, data.to_vec())
+		Clipboard::set_raw(self, format, data)
 	}
 
 	async fn set_text(&self, text: &str) -> Result<()> {
-		Clipboard::set_text(self, text.to_string())
+		Clipboard::set_text(self, text)
 	}
 
 	async fn set_rtf(&self, rtf: &str) -> Result<()> {
-		Clipboard::set_rich_text(self, rtf.to_string())
+		Clipboard::set_rtf(self, rtf)
 	}
 
 	async fn set_html(&self, html: &str) -> Result<()> {
-		Clipboard::set_html(self, html.to_string())
+		Clipboard::set_html(self, html)
 	}
 
 	#[cfg(feature = "image")]
-	async fn set_image(&self, image: RustImageData) -> Result<()> {
+	async fn set_image(&self, image: ClipboardImage) -> Result<()> {
 		Clipboard::set_image(self, image)
 	}
 
-	async fn set_files(&self, files: &[String]) -> Result<()> {
-		Clipboard::set_files(self, files.to_vec())
+	async fn set_files(&self, files: &[&str]) -> Result<()> {
+		Clipboard::set_files(self, files)
 	}
 
-	async fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
-		Clipboard::set(self, contents)
-	}
-
-	async fn set_with_builder(&self, builder: ClipboardContentBuilder) -> Result<()> {
-		Clipboard::set(self, builder.build())
+	async fn set(&self, builder: ClipboardContentBuilder) -> Result<()> {
+		Clipboard::set(self, builder)
 	}
 }
 
@@ -369,7 +283,7 @@ impl Clipboard for ClipboardContext {
 		Ok(())
 	}
 
-	fn get_buffer(&self, format: &str) -> Result<Vec<u8>> {
+	fn get_raw(&self, format: &str) -> Result<Vec<u8>> {
 		if let Some(data) = self.pasteboard.dataForType(&NSString::from_str(format)) {
 			return Ok(data.to_vec());
 		}
@@ -380,31 +294,12 @@ impl Clipboard for ClipboardContext {
 		self.plain(unsafe { NSPasteboardTypeString })
 	}
 
-	fn get_rich_text(&self) -> Result<String> {
+	fn get_rtf(&self) -> Result<String> {
 		self.plain(unsafe { NSPasteboardTypeRTF })
 	}
 
 	fn get_html(&self) -> Result<String> {
 		self.plain(unsafe { NSPasteboardTypeHTML })
-	}
-
-	#[cfg(feature = "image")]
-	fn get_image(&self) -> Result<RustImageData> {
-		autoreleasepool(|_| {
-			let png_data = self.pasteboard.dataForType(unsafe { NSPasteboardTypePNG });
-			if let Some(data) = png_data {
-				return RustImageData::from_bytes(&data.to_vec());
-			};
-			// if no png data, read NSImage;
-			let ns_image = NSImage::initWithPasteboard(NSImage::alloc(), &self.pasteboard);
-			if let Some(image) = ns_image {
-				let tiff_data = image.TIFFRepresentation();
-				if let Some(data) = tiff_data {
-					return RustImageData::from_bytes(&data.to_vec());
-				}
-			};
-			Err(ClipboardError::Empty)
-		})
 	}
 
 	fn get_files(&self) -> Result<Vec<String>> {
@@ -515,36 +410,35 @@ impl Clipboard for ClipboardContext {
 		})
 	}
 
-	fn set_buffer(&self, format: &str, buffer: Vec<u8>) -> Result<()> {
-		self.write_to_clipboard(&[ClipboardContent::Other(format.to_owned(), buffer)], true)
+	fn set_raw(&self, format: &str, data: &[u8]) -> Result<()> {
+		self.write_to_clipboard(
+			&[ClipboardContent::Other(format.to_owned(), data.to_vec())],
+			true,
+		)
 	}
 
-	fn set_text(&self, text: String) -> Result<()> {
-		self.write_to_clipboard(&[ClipboardContent::Text(text)], true)
+	fn set_text(&self, text: &str) -> Result<()> {
+		self.write_to_clipboard(&[ClipboardContent::Text(text.to_string())], true)
 	}
 
-	fn set_rich_text(&self, text: String) -> Result<()> {
-		self.write_to_clipboard(&[ClipboardContent::Rtf(text)], true)
+	fn set_rtf(&self, rtf: &str) -> Result<()> {
+		self.write_to_clipboard(&[ClipboardContent::Rtf(rtf.to_string())], true)
 	}
 
-	fn set_html(&self, html: String) -> Result<()> {
-		self.write_to_clipboard(&[ClipboardContent::Html(html)], true)
+	fn set_html(&self, html: &str) -> Result<()> {
+		self.write_to_clipboard(&[ClipboardContent::Html(html.to_string())], true)
 	}
 
-	#[cfg(feature = "image")]
-	fn set_image(&self, image: RustImageData) -> Result<()> {
-		self.write_to_clipboard(&[ClipboardContent::Image(image)], true)
-	}
-
-	fn set_files(&self, files: Vec<String>) -> Result<()> {
+	fn set_files(&self, files: &[&str]) -> Result<()> {
 		if files.is_empty() {
 			return Err(ClipboardError::InvalidData("file list is empty".into()));
 		}
 		let _ = Clipboard::clear(self);
-		self.set_files(&files)
+		self.set_files(files)
 	}
 
-	fn set(&self, contents: Vec<ClipboardContent>) -> Result<()> {
+	fn set(&self, builder: ClipboardContentBuilder) -> Result<()> {
+		let contents = builder.build();
 		if contents.is_empty() {
 			return Err(ClipboardError::InvalidData(
 				"contents is empty, if you want to clear clipboard, please use clear method".into(),
@@ -552,14 +446,90 @@ impl Clipboard for ClipboardContext {
 		}
 		self.write_to_clipboard(&contents, true)
 	}
-}
 
-pub struct WatcherShutdown {
-	stop_signal: Sender<()>,
-}
-
-impl Drop for WatcherShutdown {
-	fn drop(&mut self) {
-		let _ = self.stop_signal.send(());
+	#[cfg(feature = "image")]
+	fn get_image(&self) -> Result<ClipboardImage> {
+		autoreleasepool(|_| {
+			let png_data = self.pasteboard.dataForType(unsafe { NSPasteboardTypePNG });
+			if let Some(data) = png_data {
+				return ClipboardImage::from_bytes_sync(&data.to_vec());
+			};
+			// if no png data, read NSImage;
+			let ns_image = NSImage::initWithPasteboard(NSImage::alloc(), &self.pasteboard);
+			if let Some(image) = ns_image {
+				let tiff_data = image.TIFFRepresentation();
+				if let Some(data) = tiff_data {
+					return ClipboardImage::from_bytes_sync(&data.to_vec());
+				}
+			};
+			Err(ClipboardError::Empty)
+		})
 	}
+
+	#[cfg(feature = "image")]
+	fn set_image(&self, image: ClipboardImage) -> Result<()> {
+		self.write_to_clipboard(&[ClipboardContent::Image(image)], true)
+	}
+}
+
+/// 启动 macOS 平台的异步剪贴板监听
+#[cfg(feature = "async")]
+pub fn start_async_watch(sender: tokio::sync::mpsc::Sender<crate::ClipboardEvent>) {
+	// 克隆sender用于在线程中移动
+	let sender_clone = sender.clone();
+
+	tokio::task::spawn_blocking(move || {
+		// 在阻塞任务中运行监听循环，避免在异步任务中使用非 Send/Sync 对象
+		let pasteboard = NSPasteboard::generalPasteboard();
+		let mut last_change_count = pasteboard.changeCount();
+
+		loop {
+			// 使用 std::thread::sleep 而不是 tokio::time::sleep
+			std::thread::sleep(std::time::Duration::from_millis(500));
+
+			let change_count = pasteboard.changeCount();
+			if last_change_count == 0 {
+				last_change_count = change_count;
+			} else if change_count != last_change_count {
+				// 获取可用格式
+				let formats = if let Some(types) = pasteboard.types() {
+					types
+						.iter()
+						.map(|t| {
+							let type_str = t.to_string();
+							// 将常见的格式映射到ContentFormat枚举
+							match type_str.as_str() {
+								"public.utf8-plain-text" => crate::ContentFormat::Text,
+								"public.html" => crate::ContentFormat::Html,
+								"public.rtf" => crate::ContentFormat::Rtf,
+								"public.png" | "public.tiff" => {
+									#[cfg(feature = "image")]
+									{
+										crate::ContentFormat::Image
+									}
+									#[cfg(not(feature = "image"))]
+									{
+										crate::ContentFormat::Other(type_str.clone())
+									}
+								}
+								"public.file-url" => crate::ContentFormat::Files,
+								_ => crate::ContentFormat::Other(type_str),
+							}
+						})
+						.collect()
+				} else {
+					vec![]
+				};
+
+				// 发送事件到异步运行时
+				if let Err(_) =
+					sender_clone.blocking_send(crate::ClipboardEvent::Changed { formats })
+				{
+					// 接收端已关闭，退出循环
+					break;
+				}
+				last_change_count = change_count;
+			}
+		}
+	});
 }

@@ -1,42 +1,50 @@
-use clipboard_rs::{
-	Clipboard, ClipboardContext, ClipboardHandler, ClipboardWatcher, ClipboardWatcherContext,
-};
-use std::{thread, time::Duration};
+use clipboard_rs::{AsyncClipboardWatcher, ClipboardEvent, AsyncClipboardManager};
 
-struct Manager {
-	ctx: ClipboardContext,
-}
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create new async clipboard manager
+    let clipboard = AsyncClipboardManager::new().await?;
 
-impl Manager {
-	pub fn new() -> Self {
-		let ctx = ClipboardContext::new().unwrap();
-		Manager { ctx }
-	}
-}
+    // Start watching clipboard changes
+    let mut event_stream = clipboard.watch().await?;
 
-impl ClipboardHandler for Manager {
-	fn on_clipboard_change(&mut self) {
-		println!(
-			"on_clipboard_change, txt = {}",
-			self.ctx.get_text().unwrap_or("".to_string())
-		);
-	}
-}
+    println!("Clipboard watcher started. Try copying some text to see events!");
+    println!("Stopping in 10 seconds...");
 
-fn main() {
-	let manager = Manager::new();
+    // Handle events for 10 seconds
+    let start_time = std::time::Instant::now();
+    loop {
+        // Check if 10 seconds have passed
+        if start_time.elapsed() >= std::time::Duration::from_secs(10) {
+            println!("10 seconds elapsed, stopping watcher...");
+            break;
+        }
 
-	let mut watcher = ClipboardWatcherContext::new().unwrap();
+        // Use a timeout to check for events
+        match tokio::time::timeout(std::time::Duration::from_secs(1), event_stream.next()).await {
+            Ok(Some(event)) => {
+                match event {
+                    ClipboardEvent::Changed { formats } => {
+                        println!("Clipboard changed! Available formats: {:?}", formats);
+                    }
+                    ClipboardEvent::Cleared => {
+                        println!("Clipboard cleared!");
+                    }
+                    ClipboardEvent::Error(e) => {
+                        eprintln!("Clipboard error: {:?}", e);
+                    }
+                }
+            }
+            Ok(None) => {
+                println!("Event stream ended");
+                break;
+            }
+            Err(_) => {
+                // Timeout, continue loop to check elapsed time
+                continue;
+            }
+        }
+    }
 
-	let watcher_shutdown: clipboard_rs::WatcherShutdown =
-		watcher.add_handler(manager).get_shutdown_channel();
-
-	thread::spawn(move || {
-		thread::sleep(Duration::from_secs(5));
-		println!("stop watch!");
-		watcher_shutdown.stop();
-	});
-
-	println!("start watch!");
-	watcher.start_watch();
+    Ok(())
 }

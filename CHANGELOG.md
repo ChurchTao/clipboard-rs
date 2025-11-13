@@ -15,14 +15,18 @@
 - Updated all platform implementations to use the new error handling
 - Enhanced image processing capabilities with async support
 - Modernized documentation and examples
+- Refactored API design to remove deprecated markers and provide cleaner interface
+- Unified synchronous and asynchronous APIs through `ClipboardManager`
 
 ### Breaking Changes
 - Error handling now uses `ClipboardError` instead of `Box<dyn Error>`
 - Some method names changed (e.g., `get_rich_text` → `get_rtf` in new API)
+- Legacy API methods have been removed in favor of the new unified API
 
 ### Deprecations
 - Legacy synchronous API methods are now marked as deprecated with migration guidance to the new async API
 - Legacy clipboard watching API methods are now marked as deprecated with future async alternatives planned
+- Old direct platform context usage is discouraged in favor of `ClipboardManager`
 
 ## v0.3.1 (2025-11-11) [released]
 
