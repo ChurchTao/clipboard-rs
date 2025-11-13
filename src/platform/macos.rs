@@ -474,7 +474,10 @@ impl Clipboard for ClipboardContext {
 
 /// 启动 macOS 平台的异步剪贴板监听
 #[cfg(feature = "async")]
-pub fn start_async_watch(sender: tokio::sync::mpsc::Sender<crate::ClipboardEvent>) {
+pub fn start_async_watch(
+	sender: tokio::sync::mpsc::Sender<crate::ClipboardEvent>,
+	shutdown_rx: tokio::sync::watch::Receiver<bool>,
+) {
 	// 克隆sender用于在线程中移动
 	let sender_clone = sender.clone();
 
@@ -484,6 +487,13 @@ pub fn start_async_watch(sender: tokio::sync::mpsc::Sender<crate::ClipboardEvent
 		let mut last_change_count = pasteboard.changeCount();
 
 		loop {
+			// 检查是否收到停止信号
+			if *shutdown_rx.borrow() {
+				// 收到停止信号，退出循环
+				println!("Shutting down clipboard watcher");
+				break;
+			}
+
 			// 使用 std::thread::sleep 而不是 tokio::time::sleep
 			std::thread::sleep(std::time::Duration::from_millis(500));
 
@@ -526,6 +536,7 @@ pub fn start_async_watch(sender: tokio::sync::mpsc::Sender<crate::ClipboardEvent
 					sender_clone.blocking_send(crate::ClipboardEvent::Changed { formats })
 				{
 					// 接收端已关闭，退出循环
+					println!("Failed to send clipboard change event, then stop watching");
 					break;
 				}
 				last_change_count = change_count;

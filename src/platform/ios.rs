@@ -307,6 +307,7 @@ impl Clipboard for ClipboardContext {
 #[cfg(feature = "async")]
 pub fn start_async_watch(
 	sender: tokio::sync::mpsc::Sender<crate::ClipboardEvent>,
+	mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
 ) {
 	// 克隆sender用于在线程中移动
 	let sender_clone = sender.clone();
@@ -317,7 +318,18 @@ pub fn start_async_watch(
 		let mut last_change_count = unsafe { ios_clipboard.changeCount() };
 
 		loop {
+			// 检查是否收到停止信号
+			if *shutdown_rx.borrow() {
+				// 收到停止信号，退出循环
+				break;
+			}
+
 			std::thread::sleep(std::time::Duration::from_millis(500));
+
+			// 再次检查停止信号（在 sleep 后）
+			if *shutdown_rx.borrow() {
+				break;
+			}
 
 			let change_count = unsafe { ios_clipboard.changeCount() };
 			if last_change_count == 0 {
@@ -333,4 +345,3 @@ pub fn start_async_watch(
 		}
 	});
 }
-

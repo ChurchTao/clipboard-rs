@@ -16,7 +16,6 @@ default = ["text"]
 text = []
 image = ["dep:image", "text"]
 async = ["dep:tokio"]
-async-image = ["async", "image"]
 
 [dev-dependencies]
 tokio = { version = "1.0", features = ["rt-multi-thread", "sync", "macros"] }
@@ -28,10 +27,6 @@ required-features = ["image"]
 [[example]]
 name = "modern"
 required-features = ["async"]
-
-[[example]]
-name = "image_modern"
-required-features = ["async-image"]
 
 [[example]]
 name = "raw_data"

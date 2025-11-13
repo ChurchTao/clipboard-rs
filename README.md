@@ -25,7 +25,6 @@ clipboard-rs is a cross-platform library written in Rust for getting and setting
 - `text` - Enable text support (basic clipboard functionality)
 - `image` - Enable basic image support (depends on text)
 - `async` - Enable modern async API support
-- `async-image` - Enable modern async image processing with background thread support (depends on async and image)
 
 ### Platform Support Type Comparison Table
 

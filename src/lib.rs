@@ -25,6 +25,8 @@ pub enum ClipboardEvent {
 #[cfg(feature = "async")]
 pub struct ClipboardEventStream {
 	receiver: mpsc::Receiver<ClipboardEvent>,
+	/// 停止信号发送器，当 drop 时会自动关闭通道
+	_shutdown_tx: tokio::sync::watch::Sender<bool>,
 }
 
 #[cfg(feature = "async")]
@@ -33,12 +35,18 @@ impl ClipboardEventStream {
 	pub async fn next(&mut self) -> Option<ClipboardEvent> {
 		self.receiver.recv().await
 	}
+
+	/// 主动停止监听器
+	pub fn stop(&self) {
+		let _ = self._shutdown_tx.send(true);
+	}
 }
 
 #[cfg(feature = "async")]
 impl Drop for ClipboardEventStream {
 	fn drop(&mut self) {
-		// 无需实际操作，监听循环会在发送失败时自动停止
+		// 发送停止信号，监听循环会收到信号并退出
+		let _ = self._shutdown_tx.send(true);
 	}
 }
 
@@ -280,9 +288,15 @@ impl AsyncClipboardWatcher for AsyncClipboardManager {
 	async fn watch(&self) -> Result<ClipboardEventStream> {
 		// 创建一个通道用于发送剪贴板事件
 		let (sender, receiver) = mpsc::channel(100);
-		start_async_watch(sender);
+		// 创建一个停止信号通道
+		let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+		// 启动监听器，传递停止信号接收器
+		start_async_watch(sender, shutdown_rx);
 		// 创建事件流
-		let event_stream = ClipboardEventStream { receiver };
+		let event_stream = ClipboardEventStream {
+			receiver,
+			_shutdown_tx: shutdown_tx,
+		};
 		Ok(event_stream)
 	}
 }

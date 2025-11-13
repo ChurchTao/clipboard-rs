@@ -1,4 +1,4 @@
-use clipboard_rs::{AsyncClipboardWatcher, ClipboardEvent, AsyncClipboardManager};
+use clipboard_rs::{AsyncClipboardManager, AsyncClipboardWatcher, ClipboardEvent};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -54,6 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
 	println!("Stopping clipboard watcher...");
 
+	// 关闭监听
 	handle_events.abort();
 
 	Ok(())
