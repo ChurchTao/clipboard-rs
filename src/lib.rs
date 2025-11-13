@@ -140,7 +140,7 @@ impl SyncClipboardManager {
 	}
 
 	/// 使用构建器设置多种内容
-	pub fn set_with_builder(&self, builder: ClipboardContentBuilder) -> Result<()> {
+	pub fn set(&self, builder: ClipboardContentBuilder) -> Result<()> {
 		self.inner.set(builder)
 	}
 

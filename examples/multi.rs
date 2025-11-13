@@ -5,7 +5,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// Create new synchronous clipboard manager (requires "text" feature)
 	let clipboard = SyncClipboardManager::new()?;
 
-	clipboard.set_with_builder(
+	clipboard.set(
 		clipboard
 			.build_content()
 			.with_text("Hello, Rust!")

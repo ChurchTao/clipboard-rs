@@ -4,12 +4,12 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 use std::{mem, ptr, thread};
 
-use crate::common::{ClipboardError, ContentData, Result};
 #[cfg(feature = "image")]
 use crate::common::ClipboardImage;
+use crate::common::{ClipboardError, ContentData, Result};
 use crate::{
-	AsyncClipboard, Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat,
-	ClipboardEvent,
+	AsyncClipboard, Clipboard, ClipboardContent, ClipboardEvent, ClipboardHandler,
+	ClipboardWatcher, ContentFormat,
 };
 use clipboard_win::raw::{set_file_list_with, set_string_with, set_without_clear};
 use clipboard_win::types::c_uint;
@@ -21,13 +21,13 @@ use clipboard_win::{
 use image::codecs::bmp::BmpDecoder;
 #[cfg(feature = "image")]
 use image::DynamicImage;
+use tokio::sync::mpsc::Sender as TokioSender;
 use windows::Win32::Foundation::{HANDLE, HWND};
 use windows::Win32::Graphics::Gdi::{
 	CreateDIBitmap, DeleteObject, GetDC, ReleaseDC, BITMAPFILEHEADER, BITMAPINFO, BITMAPINFOHEADER,
 	BITMAPV5HEADER, CBM_INIT, DIB_RGB_COLORS, HDC, HGDIOBJ,
 };
 use windows::Win32::System::DataExchange::SetClipboardData;
-use tokio::sync::mpsc::Sender as TokioSender;
 
 pub struct WatcherShutdown {
 	stop_signal: Sender<()>,
@@ -833,7 +833,10 @@ pub fn start_async_watch(
 		let mut monitor = match Monitor::new() {
 			Ok(monitor) => monitor,
 			Err(e) => {
-				let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("Failed to create clipboard monitor: {}", e)));
+				let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!(
+					"Failed to create clipboard monitor: {}",
+					e
+				)));
 				return;
 			}
 		};
@@ -856,7 +859,9 @@ pub fn start_async_watch(
 				Ok(true) => {
 					// 剪贴板已更改
 					// 发送事件到异步运行时
-					if let Err(_) = sender_clone.blocking_send(crate::ClipboardEvent::Changed { formats: vec![] }) {
+					if let Err(_) = sender_clone
+						.blocking_send(crate::ClipboardEvent::Changed { formats: vec![] })
+					{
 						// 接收端已关闭，退出循环
 						break;
 					}
@@ -866,7 +871,10 @@ pub fn start_async_watch(
 					continue;
 				}
 				Err(e) => {
-					let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("Clipboard monitor error: {}", e)));
+					let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!(
+						"Clipboard monitor error: {}",
+						e
+					)));
 					break;
 				}
 			}

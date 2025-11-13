@@ -1,9 +1,9 @@
-use crate::{
-	common::Result, Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat,
-	AsyncClipboard, ClipboardEvent,
-};
 #[cfg(feature = "image")]
 use crate::common::ClipboardImage;
+use crate::{
+	common::Result, AsyncClipboard, Clipboard, ClipboardContent, ClipboardEvent, ClipboardHandler,
+	ClipboardWatcher, ContentFormat,
+};
 use objc2::{rc::Retained, runtime::ProtocolObject};
 use objc2_foundation::{ns_string, NSArray, NSData, NSDictionary, NSString};
 use objc2_ui_kit::UIPasteboard;
@@ -336,7 +336,9 @@ pub fn start_async_watch(
 				last_change_count = change_count;
 			} else if change_count != last_change_count {
 				// 发送事件到异步运行时
-				if let Err(_) = sender_clone.blocking_send(crate::ClipboardEvent::Changed { formats: vec![] }) {
+				if let Err(_) =
+					sender_clone.blocking_send(crate::ClipboardEvent::Changed { formats: vec![] })
+				{
 					// 接收端已关闭，退出循环
 					break;
 				}

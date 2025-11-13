@@ -1,10 +1,6 @@
 use crate::{
 	common::{ClipboardError, Result},
-	AsyncClipboard,
-	ClipboardContent,
-	ClipboardHandler,
-	ContentFormat,
-	ClipboardEvent,
+	AsyncClipboard, ClipboardContent, ClipboardEvent, ClipboardHandler, ContentFormat,
 };
 
 #[cfg(feature = "image")]
@@ -17,6 +13,7 @@ use std::{
 	thread,
 	time::{Duration, Instant},
 };
+use tokio::sync::mpsc::Sender as TokioSender;
 use x11rb::{
 	connection::Connection,
 	protocol::{
@@ -31,7 +28,6 @@ use x11rb::{
 	wrapper::ConnectionExt as _,
 	COPY_DEPTH_FROM_PARENT, CURRENT_TIME,
 };
-use tokio::sync::mpsc::Sender as TokioSender;
 
 x11rb::atom_manager! {
 	pub Atoms: AtomCookies {
@@ -1024,23 +1020,24 @@ fn file_uri_list_to_clipboard_data(file_list: Vec<String>, atoms: Atoms) -> Vec<
 
 /// 启动 Linux X11 平台的异步剪贴板监听
 #[cfg(feature = "async")]
-pub fn start_async_watch(
-	sender: tokio::sync::mpsc::Sender<crate::ClipboardEvent>,
-) {
+pub fn start_async_watch(sender: tokio::sync::mpsc::Sender<crate::ClipboardEvent>) {
 	// 克隆sender用于在线程中移动
 	let sender_clone = sender.clone();
 
 	// 在单独的线程中运行监听循环
 	std::thread::spawn(move || {
-		use x11rb::protocol::Event;
-		use x11rb::protocol::xfixes;
 		use std::time::Duration;
+		use x11rb::protocol::xfixes;
+		use x11rb::protocol::Event;
 
 		// 创建新的 X11 连接用于监听
 		let (conn, screen_num) = match x11rb::connect(None) {
 			Ok(conn) => conn,
 			Err(e) => {
-				let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("Failed to connect to X11: {}", e)));
+				let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!(
+					"Failed to connect to X11: {}",
+					e
+				)));
 				return;
 			}
 		};
@@ -1048,14 +1045,19 @@ pub fn start_async_watch(
 		let screen = match conn.setup().roots.get(screen_num) {
 			Some(screen) => screen,
 			None => {
-				let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error("Failed to get X11 screen".to_string()));
+				let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(
+					"Failed to get X11 screen".to_string(),
+				));
 				return;
 			}
 		};
 
 		// 初始化 xfixes 扩展
 		if let Err(e) = xfixes::query_version(&conn, 5, 0) {
-			let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("Failed to query xfixes version: {}", e)));
+			let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!(
+				"Failed to query xfixes version: {}",
+				e
+			)));
 			return;
 		}
 
@@ -1064,12 +1066,18 @@ pub fn start_async_watch(
 			Ok(cookie) => match cookie.reply() {
 				Ok(reply) => reply.atom,
 				Err(e) => {
-					let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("Failed to get CLIPBOARD atom: {}", e)));
+					let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!(
+						"Failed to get CLIPBOARD atom: {}",
+						e
+					)));
 					return;
 				}
 			},
 			Err(e) => {
-				let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("Failed to intern CLIPBOARD atom: {}", e)));
+				let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!(
+					"Failed to intern CLIPBOARD atom: {}",
+					e
+				)));
 				return;
 			}
 		};
@@ -1082,12 +1090,18 @@ pub fn start_async_watch(
 				| xfixes::SelectionEventMask::SELECTION_CLIENT_CLOSE
 				| xfixes::SelectionEventMask::SELECTION_WINDOW_DESTROY,
 		) {
-			let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("Failed to select selection input: {}", e)));
+			let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!(
+				"Failed to select selection input: {}",
+				e
+			)));
 			return;
 		}
 
 		if let Err(e) = conn.flush() {
-			let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("Failed to flush X11 connection: {}", e)));
+			let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!(
+				"Failed to flush X11 connection: {}",
+				e
+			)));
 			return;
 		}
 
@@ -1099,7 +1113,9 @@ pub fn start_async_watch(
 					if let Event::XfixesSelectionNotify(_) = event {
 						// 剪贴板已更改
 						// 发送事件到异步运行时
-						if let Err(_) = sender_clone.blocking_send(crate::ClipboardEvent::Changed { formats: vec![] }) {
+						if let Err(_) = sender_clone
+							.blocking_send(crate::ClipboardEvent::Changed { formats: vec![] })
+						{
 							// 接收端已关闭，退出循环
 							break;
 						}
@@ -1110,11 +1126,13 @@ pub fn start_async_watch(
 					continue;
 				}
 				Err(e) => {
-					let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!("X11 event polling error: {}", e)));
+					let _ = sender_clone.blocking_send(crate::ClipboardEvent::Error(format!(
+						"X11 event polling error: {}",
+						e
+					)));
 					break;
 				}
 			}
 		}
 	});
 }
-
