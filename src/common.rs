@@ -117,6 +117,12 @@ impl ClipboardContentBuilder {
 	}
 }
 
+impl Default for ClipboardContentBuilder {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl ContentData for ClipboardContent {
 	fn get_format(&self) -> ContentFormat {
 		match self {

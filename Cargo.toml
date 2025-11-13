@@ -18,7 +18,7 @@ image = ["dep:image", "text"]
 async = ["dep:tokio"]
 
 [dev-dependencies]
-tokio = { version = "1.0", features = ["rt-multi-thread", "sync", "macros"] }
+tokio = { version = "1.0", features = ["rt-multi-thread", "sync", "macros", "test-util"] }
 
 [[example]]
 name = "image"
