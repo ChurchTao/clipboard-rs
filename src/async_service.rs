@@ -1,5 +1,3 @@
-#![cfg(feature = "async")]
-
 use std::sync::{Arc, Mutex};
 
 use crate::error::ClipboardError;

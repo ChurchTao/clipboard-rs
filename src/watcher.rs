@@ -80,9 +80,9 @@ impl RunningClipboardWatcher {
 			shutdown.stop();
 		}
 		if let Some(handle) = self.join_handle.take() {
-			handle
-				.join()
-				.map_err(|_| std::io::Error::other("watcher thread panicked"))?;
+			handle.join().map_err(|_| {
+				std::io::Error::new(std::io::ErrorKind::Other, "watcher thread panicked")
+			})?;
 		}
 		Ok(())
 	}
