@@ -48,6 +48,14 @@ Add the following content to your `Cargo.toml`:
 clipboard-rs = "0.3.3"
 ```
 
+### Optional async support
+
+```toml
+[dependencies]
+clipboard-rs = { version = "0.3.3", features = ["async"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+```
+
 ## [CHANGELOG](CHANGELOG.md)
 
 ## Examples
@@ -85,6 +93,32 @@ fn main() {
 	println!("txt={}", content);
 }
 
+```
+
+### Service-oriented API (recommended for new code)
+
+```rust
+use clipboard_rs::ClipboardService;
+
+fn main() {
+    let service = ClipboardService::new().unwrap();
+    service.set_text("hello from service").unwrap();
+    assert_eq!(service.get_text().unwrap(), "hello from service");
+}
+```
+
+### Async API
+
+```rust
+#[cfg(feature = "async")]
+#[tokio::main]
+async fn main() {
+    use clipboard_rs::AsyncClipboardService;
+
+    let service = AsyncClipboardService::new().unwrap();
+    service.set_text("hello async").await.unwrap();
+    assert_eq!(service.get_text().await.unwrap(), "hello async");
+}
 ```
 
 ### Reading Images

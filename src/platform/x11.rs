@@ -1,9 +1,9 @@
 use crate::{
-	common::Result,
 	// #[cfg(feature = "image")]
 	ClipboardContent,
 	ClipboardHandler,
 	ContentFormat,
+	Result,
 };
 
 #[cfg(feature = "image")]

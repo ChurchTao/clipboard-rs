@@ -1,6 +1,6 @@
-use crate::common::Result;
 #[cfg(feature = "image")]
 use crate::common::{RustImage, RustImageData};
+use crate::Result;
 use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
 use objc2::rc::Retained;
 use objc2::AllocAnyThread;

@@ -40,6 +40,14 @@ clipboard-rs 是一个用 Rust 语言编写的跨平台库，用于获取和设�
 clipboard-rs = "0.3.3"
 ```
 
+### 可选：异步支持
+
+```toml
+[dependencies]
+clipboard-rs = { version = "0.3.3", features = ["async"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+```
+
 ## [更新日志](CHANGELOG.md)
 
 ## 示例
@@ -77,6 +85,32 @@ fn main() {
 	println!("txt={}", content);
 }
 
+```
+
+### 面向服务的 API（推荐新代码使用）
+
+```rust
+use clipboard_rs::ClipboardService;
+
+fn main() {
+    let service = ClipboardService::new().unwrap();
+    service.set_text("hello from service").unwrap();
+    assert_eq!(service.get_text().unwrap(), "hello from service");
+}
+```
+
+### 异步 API
+
+```rust
+#[cfg(feature = "async")]
+#[tokio::main]
+async fn main() {
+    use clipboard_rs::AsyncClipboardService;
+
+    let service = AsyncClipboardService::new().unwrap();
+    service.set_text("hello async").await.unwrap();
+    assert_eq!(service.get_text().await.unwrap(), "hello async");
+}
 ```
 
 ### 读取图片

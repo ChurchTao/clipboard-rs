@@ -1,10 +1,9 @@
+use crate::error::{ClipboardError, Result};
 #[cfg(feature = "image")]
 use image::imageops::FilterType;
 #[cfg(feature = "image")]
 use image::{ColorType, DynamicImage, GenericImageView, ImageFormat, RgbaImage};
-use std::error::Error;
 use std::io::Cursor;
-pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync + 'static>>;
 
 pub trait ContentData {
 	fn get_format(&self) -> ContentFormat;
@@ -67,13 +66,15 @@ impl ContentData for ClipboardContent {
 			ClipboardContent::Rtf(data) => Ok(data),
 			ClipboardContent::Html(data) => Ok(data),
 			#[cfg(feature = "image")]
-			ClipboardContent::Image(_) => Err("can't convert image to string".into()),
+			ClipboardContent::Image(_) => {
+				Err(ClipboardError::Message("can't convert image to string".to_string()).into())
+			}
 			ClipboardContent::Files(data) => {
 				// use first file path as data
 				if let Some(path) = data.first() {
 					Ok(path)
 				} else {
-					Err("content is empty".into())
+					Err(ClipboardError::EmptyContent.into())
 				}
 			}
 			ClipboardContent::Other(_, data) => std::str::from_utf8(data).map_err(|e| e.into()),

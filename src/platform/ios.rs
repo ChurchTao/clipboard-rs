@@ -1,8 +1,8 @@
-use crate::{
-	common::Result, Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat,
-};
 #[cfg(feature = "image")]
 use crate::{common::RustImage, RustImageData};
+use crate::{
+	Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat, Result,
+};
 use objc2::{rc::Retained, runtime::ProtocolObject};
 use objc2_foundation::{ns_string, NSArray, NSData, NSDictionary, NSString};
 use objc2_ui_kit::UIPasteboard;

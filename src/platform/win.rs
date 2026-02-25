@@ -4,10 +4,12 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 use std::{mem, ptr, thread};
 
-use crate::common::{ContentData, Result};
+use crate::common::ContentData;
 #[cfg(feature = "image")]
 use crate::common::{RustImage, RustImageData};
-use crate::{Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat};
+use crate::{
+	Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher, ContentFormat, Result,
+};
 use clipboard_win::raw::{set_file_list_with, set_string_with, set_without_clear};
 use clipboard_win::types::c_uint;
 use clipboard_win::{
