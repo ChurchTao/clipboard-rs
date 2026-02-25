@@ -173,53 +173,28 @@ fn main() {
 
 ```
 
-### Listening to Clipboard Changes
+### Listening to Clipboard Changes (recommended API)
 
 ```rust
-use clipboard_rs::{
-	Clipboard, ClipboardContext, ClipboardHandler, ClipboardWatcher, ClipboardWatcherContext,
-};
+use clipboard_rs::{Clipboard, ClipboardContext, ClipboardWatcherBuilder};
 use std::{thread, time::Duration};
 
-struct Manager {
-	ctx: ClipboardContext,
-}
-
-impl Manager {
-	pub fn new() -> Self {
-		let ctx = ClipboardContext::new().unwrap();
-		Manager { ctx }
-	}
-}
-
-impl ClipboardHandler for Manager {
-	fn on_clipboard_change(&mut self) {
-		println!(
-			"on_clipboard_change, txt = {}",
-			self.ctx.get_text().unwrap()
-		);
-	}
-}
-
 fn main() {
-	let manager = Manager::new();
+    let ctx = ClipboardContext::new().unwrap();
 
-	let mut watcher = ClipboardWatcherContext::new().unwrap();
+    let watcher = ClipboardWatcherBuilder::new()
+        .on_change(move || {
+            println!("on_clipboard_change, txt = {}", ctx.get_text().unwrap_or_default());
+        })
+        .spawn()
+        .unwrap();
 
-	let watcher_shutdown = watcher.add_handler(manager).get_shutdown_channel();
-
-	thread::spawn(move || {
-		thread::sleep(Duration::from_secs(5));
-		println!("stop watch!");
-		watcher_shutdown.stop();
-	});
-
-	println!("start watch!");
-	watcher.start_watch();
+    thread::sleep(Duration::from_secs(5));
+    watcher.stop().unwrap();
 }
-
-
 ```
+
+> Legacy APIs `ClipboardHandler` + `ClipboardWatcherContext<T>` are still available for backward compatibility.
 
 ## X11 - Clipboard Read Timeout
 
@@ -236,6 +211,10 @@ fn setup_clipboard(ctx: &mut ClipboardContext) -> ClipboardContext{
 	ClipboardContext::new().unwrap()
 }
 ```
+
+## Architecture
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the refactor rationale and API-flow design.
 
 ## Contributing
 

@@ -166,53 +166,28 @@ fn main() {
 
 ```
 
-### 监听剪贴板变化
+### 监听剪贴板变化（推荐 API）
 
 ```rust
-use clipboard_rs::{
-	Clipboard, ClipboardContext, ClipboardHandler, ClipboardWatcher, ClipboardWatcherContext,
-};
+use clipboard_rs::{Clipboard, ClipboardContext, ClipboardWatcherBuilder};
 use std::{thread, time::Duration};
 
-struct Manager {
-	ctx: ClipboardContext,
-}
-
-impl Manager {
-	pub fn new() -> Self {
-		let ctx = ClipboardContext::new().unwrap();
-		Manager { ctx }
-	}
-}
-
-impl ClipboardHandler for Manager {
-	fn on_clipboard_change(&mut self) {
-		println!(
-			"on_clipboard_change, txt = {}",
-			self.ctx.get_text().unwrap()
-		);
-	}
-}
-
 fn main() {
-	let manager = Manager::new();
+    let ctx = ClipboardContext::new().unwrap();
 
-	let mut watcher = ClipboardWatcherContext::new().unwrap();
+    let watcher = ClipboardWatcherBuilder::new()
+        .on_change(move || {
+            println!("on_clipboard_change, txt = {}", ctx.get_text().unwrap_or_default());
+        })
+        .spawn()
+        .unwrap();
 
-	let watcher_shutdown = watcher.add_handler(manager).get_shutdown_channel();
-
-	thread::spawn(move || {
-		thread::sleep(Duration::from_secs(5));
-		println!("stop watch!");
-		watcher_shutdown.stop();
-	});
-
-	println!("start watch!");
-	watcher.start_watch();
+    thread::sleep(Duration::from_secs(5));
+    watcher.stop().unwrap();
 }
-
-
 ```
+
+> 为保持兼容性，`ClipboardHandler` + `ClipboardWatcherContext<T>` 旧 API 仍可继续使用。
 
 ## X11 - 读取超时设定
 
@@ -229,6 +204,10 @@ fn setup_clipboard(ctx: &mut ClipboardContext) -> ClipboardContext{
 	ClipboardContext::new().unwrap()
 }
 ```
+
+## 架构说明
+
+重构动机与 API/流程设计见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ## 贡献
 

@@ -4,6 +4,7 @@ pub mod common;
 pub mod error;
 mod platform;
 mod service;
+mod watcher;
 #[cfg(feature = "async")]
 pub use async_service::AsyncClipboardService;
 #[cfg(feature = "image")]
@@ -16,6 +17,7 @@ pub use image::imageops::FilterType;
 pub use platform::ClipboardContextX11Options;
 pub use platform::{ClipboardContext, ClipboardWatcherContext, WatcherShutdown};
 pub use service::ClipboardService;
+pub use watcher::{ClipboardWatcherBuilder, RunningClipboardWatcher};
 
 pub trait Clipboard: Send {
 	/// zh: 获得剪切板当前内容的所有格式
@@ -68,6 +70,9 @@ pub trait Clipboard: Send {
 	fn set(&self, contents: Vec<ClipboardContent>) -> Result<()>;
 }
 
+/// Legacy watcher abstraction.
+///
+/// Prefer [`ClipboardWatcherBuilder`] for new code.
 pub trait ClipboardWatcher<T: ClipboardHandler>: Send {
 	/// zh: 添加一个剪切板变化处理器，可以添加多个处理器，处理器需要实现 [`ClipboardHandler`] 这个trait
 	/// en: Add a clipboard change handler, you can add multiple handlers, the handler needs to implement the trait [`ClipboardHandler`]
