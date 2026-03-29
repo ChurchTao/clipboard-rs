@@ -296,6 +296,9 @@ unsafe impl<T: ClipboardHandler> Send for ClipboardWatcherContext<T> {}
 
 impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
     pub fn new() -> Result<Self> {
+        // Verify data-control protocol is available (same check as ClipboardContext)
+        is_primary_selection_supported()
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.to_string().into() })?;
         let (tx, rx) = mpsc::channel();
         Ok(Self {
             handlers: Vec::new(),
