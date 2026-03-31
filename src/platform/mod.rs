@@ -56,13 +56,9 @@ pub use x11::ClipboardContextX11Options;
 	))
 ))]
 mod linux_clipboard {
-	use crate::{
-		common::Result, Clipboard, ClipboardContent, ClipboardHandler, ClipboardWatcher,
-		ContentFormat,
-	};
 	#[cfg(feature = "image")]
 	use crate::RustImageData;
-	use std::sync::mpsc::{self, Sender};
+	use crate::{common::Result, Clipboard, ClipboardContent, ClipboardHandler, ContentFormat};
 
 	pub enum ClipboardContext {
 		X11(super::x11::ClipboardContext),
@@ -78,10 +74,7 @@ mod linux_clipboard {
 					match super::wayland::ClipboardContext::new() {
 						Ok(ctx) => return Ok(Self::Wayland(ctx)),
 						Err(e) => {
-							eprintln!(
-								"Wayland clipboard init failed, falling back to X11: {}",
-								e
-							);
+							eprintln!("Wayland clipboard init failed, falling back to X11: {}", e);
 						}
 					}
 				}
@@ -188,10 +181,7 @@ mod linux_clipboard {
 					match super::wayland::ClipboardWatcherContext::new() {
 						Ok(ctx) => return Ok(Self::Wayland(ctx)),
 						Err(e) => {
-							eprintln!(
-								"Wayland watcher init failed, falling back to X11: {}",
-								e
-							);
+							eprintln!("Wayland watcher init failed, falling back to X11: {}", e);
 						}
 					}
 				}
@@ -200,7 +190,7 @@ mod linux_clipboard {
 		}
 	}
 
-	impl<T: ClipboardHandler> crate::ClipboardWatcher<T> for ClipboardWatcherContext<T> {
+	impl<T: ClipboardHandler + Send> crate::ClipboardWatcher<T> for ClipboardWatcherContext<T> {
 		fn add_handler(&mut self, f: T) -> &mut Self {
 			match self {
 				Self::X11(ctx) => {
@@ -239,7 +229,7 @@ mod linux_clipboard {
 		}
 	}
 
-	unsafe impl<T: ClipboardHandler> Send for ClipboardWatcherContext<T> {}
+	unsafe impl<T: ClipboardHandler + Send> Send for ClipboardWatcherContext<T> {}
 
 	enum WatcherShutdownInner {
 		X11(super::x11::WatcherShutdown),
