@@ -775,7 +775,7 @@ impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 		}
 	}
 
-	fn get_shutdown_channel(&self) -> WatcherShutdown {
+	pub(crate) fn get_shutdown_channel(&self) -> WatcherShutdown {
 		WatcherShutdown {
 			sender: self.stop_signal.clone(),
 		}

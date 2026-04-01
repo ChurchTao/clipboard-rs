@@ -327,6 +327,12 @@ impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 }
 
 impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
+	pub(crate) fn get_shutdown_channel(&self) -> WatcherShutdown {
+		WatcherShutdown {
+			sender: self.stop_signal.clone(),
+		}
+	}
+
 	pub(crate) fn start_watch_inner(&mut self) {
 		let mut last_mime_types: Vec<String> = Vec::new();
 		let mut last_text = String::new();
@@ -407,8 +413,6 @@ impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 		}
 	}
 }
-
-// get_shutdown_channel is handled by the linux_clipboard wrapper in mod.rs
 
 pub struct WatcherShutdown {
 	pub(crate) sender: Sender<()>,

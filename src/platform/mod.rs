@@ -215,15 +215,11 @@ mod linux_clipboard {
 		fn get_shutdown_channel(&self) -> WatcherShutdown {
 			match self {
 				Self::X11(ctx) => WatcherShutdown {
-					_inner: WatcherShutdownInner::X11(super::x11::WatcherShutdown {
-						sender: ctx.stop_signal.clone(),
-					}),
+					_shutdown: Box::new(ctx.get_shutdown_channel()),
 				},
 				#[cfg(feature = "wayland")]
 				Self::Wayland(ctx) => WatcherShutdown {
-					_inner: WatcherShutdownInner::Wayland(super::wayland::WatcherShutdown {
-						sender: ctx.stop_signal.clone(),
-					}),
+					_shutdown: Box::new(ctx.get_shutdown_channel()),
 				},
 			}
 		}
@@ -231,14 +227,8 @@ mod linux_clipboard {
 
 	unsafe impl<T: ClipboardHandler + Send> Send for ClipboardWatcherContext<T> {}
 
-	enum WatcherShutdownInner {
-		X11(super::x11::WatcherShutdown),
-		#[cfg(feature = "wayland")]
-		Wayland(super::wayland::WatcherShutdown),
-	}
-
 	pub struct WatcherShutdown {
-		_inner: WatcherShutdownInner,
+		_shutdown: Box<dyn std::any::Any + Send>,
 	}
 
 	impl WatcherShutdown {
