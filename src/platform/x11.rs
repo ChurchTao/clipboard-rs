@@ -9,7 +9,7 @@ use crate::{
 #[cfg(feature = "image")]
 use crate::{common::RustImage, RustImageData};
 
-use crate::{Clipboard, ClipboardWatcher};
+use crate::Clipboard;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::{
 	sync::{Arc, RwLock},
@@ -707,8 +707,8 @@ impl Clipboard for ClipboardContext {
 }
 
 pub struct ClipboardWatcherContext<T: ClipboardHandler> {
-	handlers: Vec<T>,
-	stop_signal: Sender<()>,
+	pub(crate) handlers: Vec<T>,
+	pub(crate) stop_signal: Sender<()>,
 	stop_receiver: Receiver<()>,
 }
 
@@ -725,13 +725,8 @@ impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 	}
 }
 
-impl<T: ClipboardHandler> ClipboardWatcher<T> for ClipboardWatcherContext<T> {
-	fn add_handler(&mut self, f: T) -> &mut Self {
-		self.handlers.push(f);
-		self
-	}
-
-	fn start_watch(&mut self) {
+impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
+	pub(crate) fn start_watch_inner(&mut self) {
 		let watch_server = XServerContext::new().expect("Failed to create X server context");
 		let screen = watch_server
 			.conn
@@ -780,7 +775,7 @@ impl<T: ClipboardHandler> ClipboardWatcher<T> for ClipboardWatcherContext<T> {
 		}
 	}
 
-	fn get_shutdown_channel(&self) -> WatcherShutdown {
+	pub(crate) fn get_shutdown_channel(&self) -> WatcherShutdown {
 		WatcherShutdown {
 			sender: self.stop_signal.clone(),
 		}
@@ -788,7 +783,7 @@ impl<T: ClipboardHandler> ClipboardWatcher<T> for ClipboardWatcherContext<T> {
 }
 
 pub struct WatcherShutdown {
-	sender: Sender<()>,
+	pub(crate) sender: Sender<()>,
 }
 
 impl Drop for WatcherShutdown {
