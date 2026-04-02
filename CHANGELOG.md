@@ -3,6 +3,7 @@
 ## v0.3.4 (2026-04-02) [released]
 
 - Fix: Convert HTML to Windows CF_HTML format when setting multiple clipboard contents, fixing malformed HTML data in `set(Vec<ClipboardContent>)` on Windows [#80](https://github.com/ChurchTao/clipboard-rs/issues/80)
+- Merge pull request [#83](https://github.com/ChurchTao/clipboard-rs/pull/83) — feat: add Wayland clipboard support via wl-clipboard-rs
 
 ## v0.3.2 (2026-01-20) [released]
 
