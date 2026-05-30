@@ -188,6 +188,25 @@ mod linux_clipboard {
 			}
 			Ok(Self::X11(super::x11::ClipboardWatcherContext::new()?))
 		}
+
+		/// Creates a watcher with a custom poll `interval`, selecting the Wayland
+		/// or X11 backend the same way as [`Self::new`].
+		pub fn new_with_interval(interval: std::time::Duration) -> Result<Self> {
+			#[cfg(feature = "wayland")]
+			{
+				if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+					match super::wayland::ClipboardWatcherContext::new_with_interval(interval) {
+						Ok(ctx) => return Ok(Self::Wayland(ctx)),
+						Err(e) => {
+							eprintln!("Wayland watcher init failed, falling back to X11: {}", e);
+						}
+					}
+				}
+			}
+			Ok(Self::X11(
+				super::x11::ClipboardWatcherContext::new_with_interval(interval)?,
+			))
+		}
 	}
 
 	impl<T: ClipboardHandler + Send> crate::ClipboardWatcher<T> for ClipboardWatcherContext<T> {

@@ -710,17 +710,33 @@ pub struct ClipboardWatcherContext<T: ClipboardHandler> {
 	pub(crate) handlers: Vec<T>,
 	pub(crate) stop_signal: Sender<()>,
 	stop_receiver: Receiver<()>,
+	interval: Duration,
 }
 
 unsafe impl<T: ClipboardHandler> Send for ClipboardWatcherContext<T> {}
 
+/// Default interval between checks for a stop signal. X11 delivers clipboard
+/// changes via XFixes events; this only bounds how quickly a stop request is
+/// observed, not change-detection latency.
+const DEFAULT_WATCH_INTERVAL: Duration = Duration::from_millis(500);
+
 impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 	pub fn new() -> Result<Self> {
+		Self::new_with_interval(DEFAULT_WATCH_INTERVAL)
+	}
+
+	/// Creates a watcher with a custom stop-signal poll `interval`.
+	///
+	/// Provided for cross-platform API symmetry; on X11 clipboard changes arrive
+	/// as XFixes events, so `interval` only affects how promptly a stop request
+	/// is noticed between event polls.
+	pub fn new_with_interval(interval: Duration) -> Result<Self> {
 		let (tx, rx) = mpsc::channel();
 		Ok(Self {
 			handlers: Vec::new(),
 			stop_signal: tx,
 			stop_receiver: rx,
+			interval,
 		})
 	}
 }
@@ -750,11 +766,7 @@ impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 		cookie.check().unwrap();
 
 		loop {
-			if self
-				.stop_receiver
-				.recv_timeout(Duration::from_millis(500))
-				.is_ok()
-			{
+			if self.stop_receiver.recv_timeout(self.interval).is_ok() {
 				break;
 			}
 			let event = match watch_server

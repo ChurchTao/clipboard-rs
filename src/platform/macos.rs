@@ -27,12 +27,26 @@ pub struct ClipboardWatcherContext<T: ClipboardHandler> {
 	stop_signal: Sender<()>,
 	stop_receiver: Receiver<()>,
 	running: bool,
+	interval: Duration,
 }
 
 unsafe impl<T: ClipboardHandler> Send for ClipboardWatcherContext<T> {}
 
+/// Default polling interval. macOS exposes no clipboard-change event, so the
+/// watcher polls `NSPasteboard.changeCount`; this is the wait between polls.
+const DEFAULT_WATCH_INTERVAL: Duration = Duration::from_millis(500);
+
 impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 	pub fn new() -> Result<Self> {
+		Self::new_with_interval(DEFAULT_WATCH_INTERVAL)
+	}
+
+	/// Creates a watcher that polls the pasteboard every `interval`.
+	///
+	/// macOS has no clipboard-change notification API, so changes are detected by
+	/// polling `changeCount`. A smaller `interval` lowers detection latency at the
+	/// cost of more frequent wake-ups; `new` uses [`DEFAULT_WATCH_INTERVAL`].
+	pub fn new_with_interval(interval: Duration) -> Result<Self> {
 		let ns_pasteboard = NSPasteboard::generalPasteboard();
 		let (tx, rx) = mpsc::channel();
 		Ok(ClipboardWatcherContext {
@@ -41,6 +55,7 @@ impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 			stop_signal: tx,
 			stop_receiver: rx,
 			running: false,
+			interval,
 		})
 	}
 }
@@ -64,11 +79,7 @@ impl<T: ClipboardHandler> ClipboardWatcher<T> for ClipboardWatcherContext<T> {
 		let mut last_change_count = self.pasteboard.changeCount();
 		loop {
 			// if receive stop signal, break loop
-			if self
-				.stop_receiver
-				.recv_timeout(Duration::from_millis(500))
-				.is_ok()
-			{
+			if self.stop_receiver.recv_timeout(self.interval).is_ok() {
 				break;
 			}
 			let change_count = self.pasteboard.changeCount();

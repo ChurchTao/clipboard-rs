@@ -308,12 +308,26 @@ pub struct ClipboardWatcherContext<T: ClipboardHandler> {
 	pub(crate) handlers: Vec<T>,
 	pub(crate) stop_signal: Sender<()>,
 	stop_receiver: Receiver<()>,
+	interval: Duration,
 }
 
 unsafe impl<T: ClipboardHandler + Send> Send for ClipboardWatcherContext<T> {}
 
+/// Default polling interval. The Wayland backend has no change-notification
+/// protocol, so it polls the clipboard; this is the wait between polls.
+const DEFAULT_WATCH_INTERVAL: Duration = Duration::from_millis(500);
+
 impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 	pub fn new() -> Result<Self> {
+		Self::new_with_interval(DEFAULT_WATCH_INTERVAL)
+	}
+
+	/// Creates a watcher that polls the clipboard every `interval`.
+	///
+	/// Wayland exposes no clipboard-change notification, so changes are detected
+	/// by polling. A smaller `interval` lowers detection latency at the cost of
+	/// more frequent wake-ups; `new` uses [`DEFAULT_WATCH_INTERVAL`].
+	pub fn new_with_interval(interval: Duration) -> Result<Self> {
 		// Verify data-control protocol is available (same check as ClipboardContext)
 		is_primary_selection_supported()
 			.map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.to_string().into() })?;
@@ -322,6 +336,7 @@ impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 			handlers: Vec::new(),
 			stop_signal: tx,
 			stop_receiver: rx,
+			interval,
 		})
 	}
 }
@@ -352,11 +367,7 @@ impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 		}
 
 		loop {
-			if self
-				.stop_receiver
-				.recv_timeout(Duration::from_millis(500))
-				.is_ok()
-			{
+			if self.stop_receiver.recv_timeout(self.interval).is_ok() {
 				break;
 			}
 
