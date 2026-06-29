@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::io::Cursor;
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use std::{mem, ptr, thread};
+use std::{mem, ptr};
 
 use crate::common::{ContentData, Result};
 #[cfg(feature = "image")]
@@ -26,7 +26,7 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::System::DataExchange::SetClipboardData;
 
 pub struct WatcherShutdown {
-	stop_signal: Sender<()>,
+	state: Arc<Mutex<ShutdownState>>,
 }
 
 static UNKNOWN_FORMAT: &str = "unknown format";
@@ -39,10 +39,26 @@ pub struct ClipboardContext {
 	html_format: formats::Html,
 }
 
+/// Shared shutdown state between a [`WatcherShutdown`] handle and the running
+/// watch loop.
+///
+/// The `clipboard_win` [`Monitor`] (and thus its `Shutdown`) must be created on
+/// the thread that runs `start_watch`, but `get_shutdown_channel` is typically
+/// called earlier on another thread. This state bridges that gap and is guarded
+/// by a mutex so the handoff is race-free: storing the live `Shutdown` and
+/// observing a pre-start stop request both happen under the same lock.
+enum ShutdownState {
+	/// Watch loop has not published its `Shutdown` yet.
+	NotStarted,
+	/// Watch loop is running; dropping this `Shutdown` interrupts `recv`.
+	Running(clipboard_win::monitor::Shutdown),
+	/// Stop was requested before the watch loop published its `Shutdown`.
+	StopRequested,
+}
+
 pub struct ClipboardWatcherContext<T: ClipboardHandler> {
 	handlers: Vec<T>,
-	stop_signal: Sender<()>,
-	stop_receiver: Receiver<()>,
+	state: Arc<Mutex<ShutdownState>>,
 	running: bool,
 }
 
@@ -90,13 +106,18 @@ impl ClipboardContext {
 
 impl<T: ClipboardHandler> ClipboardWatcherContext<T> {
 	pub fn new() -> Result<Self> {
-		let (tx, rx) = std::sync::mpsc::channel();
 		Ok(Self {
 			handlers: Vec::new(),
-			stop_signal: tx,
-			stop_receiver: rx,
+			state: Arc::new(Mutex::new(ShutdownState::NotStarted)),
 			running: false,
 		})
+	}
+
+	/// Creates a watcher. Provided for cross-platform API symmetry with the
+	/// macOS backend; `_interval` is ignored on Windows because changes are
+	/// delivered by the OS via `WM_CLIPBOARDUPDATE` rather than polled.
+	pub fn new_with_interval(_interval: Duration) -> Result<Self> {
+		Self::new()
 	}
 }
 
@@ -454,43 +475,60 @@ impl<T: ClipboardHandler> ClipboardWatcher<T> for ClipboardWatcherContext<T> {
 		}
 		self.running = true;
 		let mut monitor = Monitor::new().expect("create monitor error");
-		let shutdown = monitor.shutdown_channel();
-		loop {
-			if self.stop_receiver.try_recv().is_ok() {
-				break;
+
+		// Publish the live Shutdown so a WatcherShutdown can interrupt `recv`.
+		// If stop was already requested before we got here, bail out at once.
+		{
+			let mut state = self.state.lock().unwrap();
+			if matches!(*state, ShutdownState::StopRequested) {
+				self.running = false;
+				return;
 			}
-			let msg = monitor.try_recv();
-			match msg {
+			*state = ShutdownState::Running(monitor.shutdown_channel());
+		}
+
+		loop {
+			match monitor.recv() {
+				// New clipboard update.
 				Ok(true) => {
 					self.handlers.iter_mut().for_each(|f| {
 						f.on_clipboard_change();
 					});
 				}
-				Ok(false) => {
-					// no change
-					thread::park_timeout(Duration::from_millis(200));
-					continue;
-				}
+				// Shutdown requested (Shutdown handle dropped).
+				Ok(false) => break,
 				Err(e) => {
 					eprintln!("watch error, code = {e}");
 					break;
 				}
 			}
 		}
-		drop(shutdown);
+		*self.state.lock().unwrap() = ShutdownState::NotStarted;
 		self.running = false;
 	}
 
 	fn get_shutdown_channel(&self) -> WatcherShutdown {
 		WatcherShutdown {
-			stop_signal: self.stop_signal.clone(),
+			state: self.state.clone(),
 		}
 	}
 }
 
 impl Drop for WatcherShutdown {
 	fn drop(&mut self) {
-		let _ = self.stop_signal.send(());
+		// Take the current state, marking a stop request, then act on what we
+		// took after releasing the lock.
+		let taken = {
+			let mut state = self.state.lock().unwrap();
+			std::mem::replace(&mut *state, ShutdownState::StopRequested)
+		};
+		match taken {
+			// Loop is blocked in `recv`; dropping its Shutdown interrupts it.
+			ShutdownState::Running(shutdown) => drop(shutdown),
+			// Loop has not started (or already stopped): StopRequested, written
+			// above, makes it bail out before entering `recv`.
+			ShutdownState::NotStarted | ShutdownState::StopRequested => {}
+		}
 	}
 }
 
