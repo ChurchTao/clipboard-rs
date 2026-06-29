@@ -426,15 +426,12 @@ fn process_server_req(context: &InnerContext) -> Result<()> {
 					.handle_selection_request(event)
 					.map_err(|e| format!("handle_selection_request error: {e:?}"))?;
 			}
-			Event::SelectionNotify(event) => {
+			Event::SelectionNotify(event) if event.selection != atoms.CLIPBOARD_MANAGER => {
 				// We've requested the clipboard content and this is the answer.
 				// Considering that this thread is not responsible for reading
 				// clipboard contents, this must come from the clipboard manager
 				// signaling that the data was handed over successfully.
-				if event.selection != atoms.CLIPBOARD_MANAGER {
-					println!("Received a `SelectionNotify` from a selection other than the CLIPBOARD_MANAGER. This is unexpected in this thread.");
-					continue;
-				}
+				println!("Received a `SelectionNotify` from a selection other than the CLIPBOARD_MANAGER. This is unexpected in this thread.");
 			}
 			_event => {
 				// May be useful for debugging but nothing else really.
