@@ -37,7 +37,7 @@ clipboard-rs 是一个用 Rust 语言编写的跨平台库，用于获取和设�
 
 ```toml
 [dependencies]
-clipboard-rs = "0.3.3"
+clipboard-rs = "0.3.5"
 ```
 
 ## [更新日志](CHANGELOG.md)
